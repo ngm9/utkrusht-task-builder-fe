@@ -63,6 +63,43 @@ docker run -p 8080:80 task-builder-web
 Deploy the image as its own service (Coolify / Dokploy), publish port `80`, and
 set the `VITE_API_BASE` **build arg** to the deployed backend URL.
 
+### CI/CD
+
+| Workflow | Trigger | Client channel | Image |
+|---|---|---|---|
+| `ci.yml` | push / PR to `main`, `release`, `staging` | resolves `@dev`, or `@latest` for `release` | — |
+| `devapp-image.yml` | CI success on `main` | `@dev` | `ghcr.io/ngm9/utkrusht-task-builder-fe-dev` |
+| `app-image.yml` | CI success on `release` | `@latest` | `ghcr.io/ngm9/utkrusht-task-builder-fe-prod` |
+
+The committed `@ngm9/recruiter-client` pin is only a resolvable baseline for
+local installs. Every build — CI and image alike — floats it to the channel
+dist-tag with `npm install --no-save`, so the frontend cannot lag a freshly
+published client and `main`/`release` never diverge on the pin.
+
+> **Production is blocked until a stable client ships the task-builder API.**
+> The `@latest` channel is currently `2.0.0`, which predates those routes and
+> carries none of them; they exist only on `@dev`. `app-image.yml` preflights
+> this and fails with an explicit message rather than a rollup export error.
+
+### Why this app calls Flask directly from the browser
+
+The house pattern (see the recruiter-client guide) is **never call Flask from
+the browser** — because the recruiter token is an httpOnly `authToken` cookie
+that browser JS cannot read, so calls must go through server-side Next.js code.
+
+Neither half of that applies here:
+
+- This is a **Vite SPA served by nginx**. There is no server runtime to proxy
+  through — no `next/headers`, no `src/app/api/**`.
+- Every `/v2/task-builder/*` route is **PUBLIC** (see `PUBLIC_ROUTES` in the
+  backend's `auth_middleware.py`). There is no token to keep out of the bundle;
+  the unguessable conversation UUID is the credential.
+
+So calls go browser → Flask cross-origin, which means this app's origin **must**
+be listed in the backend's `FLASK_CORS_ORIGINS`. If this frontend ever needs a
+*guarded* Flask route, that reasoning stops holding and it needs a server-side
+seam — do not just add a token to the bundle.
+
 ## Layout
 
 ```
