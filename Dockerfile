@@ -7,8 +7,13 @@
 
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci || npm install
+# .npmrc routes the @ngm9 scope to GitHub Packages. The token is mounted as a
+# BuildKit secret (never baked into a layer) so it stays out of the image
+# history. Same pattern as recruiter-utkrusht's Dockerfile.
+COPY package.json package-lock.json* .npmrc* ./
+RUN --mount=type=secret,id=node_auth_token \
+    NODE_AUTH_TOKEN="$(cat /run/secrets/node_auth_token 2>/dev/null || true)"; export NODE_AUTH_TOKEN; \
+    npm ci || npm install
 COPY . .
 ARG VITE_API_BASE=""
 # Optional: bake the backend token into the bundle so the app never prompts.

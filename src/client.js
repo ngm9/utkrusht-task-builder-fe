@@ -17,10 +17,12 @@ configureRecruiterClient({
   },
 })
 
+// NOTE: no listTaskBuilderSessions — Flask has no GET /v2/task-builder/sessions
+// (only POST). It existed in a hand-packed client build; the published one is
+// generated from the real OpenAPI spec, so re-exporting it fails the build.
 export {
   getTaskBuilderGreeting,
   createTaskBuilderSession,
-  listTaskBuilderSessions,
   getTaskBuilderSession,
   createTaskBuilderMessage,
   getTaskBuilderScenarios,
