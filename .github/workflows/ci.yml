@@ -1,0 +1,48 @@
+name: CI
+
+# Gates the image build: devapp-image.yml runs on this workflow's SUCCESS, so a
+# red CI means no image and no deploy. Also runs on PRs, where it is the only
+# check — the image job deliberately never runs for a PR.
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Install, test & build
+    runs-on: ubuntu-latest
+    env:
+      # @ngm9/recruiter-client lives on GitHub Packages, not public npm, so even
+      # a plain `npm ci` needs a token for that scope. .npmrc reads it from here.
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        # The real gate. A missing export from @ngm9/recruiter-client — the most
+        # likely breakage, since the client is regenerated from the backend's
+        # OpenAPI spec — fails here rather than in the browser.
+        run: npm run build
