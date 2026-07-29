@@ -12,7 +12,7 @@ function slotValue(def, brief) {
 // App (only the latest card is kept, so the snapshot is the current brief).
 export default function BriefCard({ m, ui }) {
   const { brief = {}, missing = [] } = m
-  const { generating, genDisabled, onSlotClick, env, onEnvChange, onGenerate, genHint } = ui
+  const { generating, genDisabled, onSlotClick, onGenerate, genHint } = ui
 
   const asking = generating ? null : missing.length ? missing[0] : null
   const totalRequired = SLOT_DEFS.filter((d) => d.required).length
@@ -49,13 +49,6 @@ export default function BriefCard({ m, ui }) {
         ))}
       </ul>
       <div className="actions">
-        <label className="env-pick">
-          Environment
-          <select value={env} onChange={(e) => onEnvChange(e.target.value)} disabled={generating}>
-            <option value="dev">dev</option>
-            <option value="prod">prod</option>
-          </select>
-        </label>
         <button className="cta" disabled={genDisabled} onClick={onGenerate}>
           Generate task →
         </button>

@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { api, eventsUrl } from './api.js'
+import {
+  createTaskBuilderSession,
+  createTaskBuilderMessage,
+  getTaskBuilderScenarios,
+  prepareTaskBuilderRun,
+  generateTaskBuilderRun,
+  getTaskBuilderRun,
+} from './client.js'
 import { fetchTaskDetail } from './taskDetail.js'
 import { registerIds, track } from './analytics.js'
 import { loadSessions, saveSessions } from './persist.js'
@@ -53,7 +60,6 @@ export default function App() {
   const [input, setInput] = useState('')
   const [instructions, setInstructions] = useState('')
   const [showStarters, setShowStarters] = useState(false)
-  const [env, setEnv] = useState('dev')
   const [printDate, setPrintDate] = useState('')
 
   // side panels
@@ -77,12 +83,10 @@ export default function App() {
   const busyRef = useRef(false)
   const generatingRef = useRef(false)
   const panelStateRef = useRef(EMPTY_PANEL)
-  const envRef = useRef('dev')
   const instructionsRef = useRef('')
   const selectedScenarioRef = useRef('')
   const scenariosPreparedRef = useRef(false)
   const inputRef = useRef('')
-  const activeStreamRef = useRef(null)
   const prepStreamRef = useRef(null)
   const prepTimerRef = useRef(null)
   const buildTimerRef = useRef(null)
@@ -179,12 +183,7 @@ export default function App() {
   // ---- conversation --------------------------------------------------------
   async function startSession() {
     try {
-      const res = await api('/api/session', { method: 'POST' })
-      if (res.status === 403) {
-        addBubble('bot', 'Access token required — reload the page to try again.')
-        return
-      }
-      const data = await res.json()
+      const { data } = await createTaskBuilderSession()
       sessionIdRef.current = data.session_id
       setSessionId(data.session_id)
       // Tag this replay/session with the conversation id so it's searchable.
@@ -206,12 +205,7 @@ export default function App() {
     addBubble('user', text)
     const thinkingId = addBubble('bot', '…', '', true)
     try {
-      const res = await api('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionIdRef.current, message: text }),
-      })
-      const data = await res.json()
+      const { data } = await createTaskBuilderMessage(sessionIdRef.current, { message: text })
       patchMessage(thinkingId, { text: data.reply, pending: false })
       updateBrief(data)
     } catch {
@@ -221,117 +215,6 @@ export default function App() {
     }
   }
   const send = () => sendText(inputRef.current)
-
-  // ---- generation ----------------------------------------------------------
-  function startGeneration() {
-    if (generatingRef.current || !isBriefComplete(panelStateRef.current.brief) || !sessionIdRef.current)
-      return
-    const curEnv = envRef.current
-    const instr = (instructionsRef.current || '').trim()
-    generatingRef.current = true
-    setGenerating(true)
-
-    const bits = []
-    if (instr) bits.push('with your instructions')
-    if (selectedScenarioRef.current) bits.push('your selected scenario')
-    addBubble('bot', `Generating in ${curEnv}${bits.length ? ' — ' + bits.join(' and ') : ''}…`, 'stage')
-
-    api('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionIdRef.current,
-        env: curEnv,
-        instructions: instr,
-        selected_scenario: selectedScenarioRef.current,
-        scenarios_prepared: scenariosPreparedRef.current,
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        // Tag the replay/session with the generation job id too.
-        registerIds({ generation_run_id: data.run_id })
-        track('generation_started', {
-          run_id: data.run_id,
-          conversation_id: sessionIdRef.current,
-          env: curEnv,
-        })
-        streamRun(data.run_id)
-      })
-      .catch(() => {
-        generatingRef.current = false
-        setGenerating(false)
-        addBubble('bot', 'Could not start generation.', 'stage failed')
-      })
-  }
-
-  function doneBubble(e) {
-    const spec = {
-      status: e.status,
-      outcome: e.outcome || '',
-      detail: e.detail || '',
-      task_url: e.task_url || '',
-      task_id: e.task_id || '',
-      task_name: e.task_name || '',
-      task_type: e.task_type || '',
-      competencies: e.competencies || '',
-      env: e.env || '',
-      task: null,
-    }
-    const id = addDone(spec)
-    // run_id + conversation_id ride along as registered super-properties.
-    track('generation_finished', {
-      status: e.status,
-      outcome: e.outcome || '',
-      task_id: e.task_id || '',
-      task_url: e.task_url || '',
-    })
-    generatingRef.current = false
-    setGenerating(false)
-    // Upgrade the plain done-card to the full task detail card once the
-    // task row is readable (title / problem statement / outcomes).
-    if (e.status === 'completed' && e.task_id) {
-      fetchTaskDetail(e.task_id, e.env || envRef.current).then((details) => {
-        if (details) patchMessage(id, { task: details })
-      })
-    }
-  }
-
-  function streamRun(runId) {
-    const stageMsgId = {}
-    const es = new EventSource(eventsUrl(`/api/runs/${runId}/events`))
-    activeStreamRef.current = es
-    es.onmessage = (ev) => {
-      const e = JSON.parse(ev.data)
-      if (e.stage === 'done') {
-        doneBubble(e)
-        es.close()
-        activeStreamRef.current = null
-        return
-      }
-      let id = stageMsgId[e.stage]
-      if (id == null) {
-        id = addStage(e.stage)
-        stageMsgId[e.stage] = id
-      }
-      if (e.status === 'running') {
-        patchMessage(id, { summary: `⏳ ${e.stage}`, open: true })
-      } else if (e.status === 'log') {
-        appendLog(id, e.detail || '')
-      } else if (e.status === 'ok') {
-        const secs = e.duration_s != null ? ` · ${e.duration_s}s` : ''
-        patchMessage(id, { summary: `✓ ${e.stage}${secs}`, open: false })
-      } else if (e.status === 'failed') {
-        patchMessage(id, { summary: `✗ ${e.stage} ${e.detail || ''}`.trim(), open: true })
-      }
-    }
-    es.onerror = () => {
-      es.close()
-      activeStreamRef.current = null
-      generatingRef.current = false
-      setGenerating(false)
-    }
-  }
 
   // ---- generate wizard -----------------------------------------------------
   function composeInstructions() {
@@ -383,30 +266,23 @@ export default function App() {
       list: [],
       error: '',
     })
-    const curEnv = envRef.current
-    api(`/api/scenarios?session_id=${encodeURIComponent(sessionIdRef.current)}&env=${curEnv}`)
-      .then((r) => r.json())
-      .then((data) => {
+    getTaskBuilderScenarios(sessionIdRef.current)
+      .then(({ data }) => {
         const pool = (data && data.scenarios) || []
         if (pool.length) {
           scenariosPreparedRef.current = true
           setScenarioStage((prev) => ({ ...prev, mode: 'list', list: pool }))
         } else {
-          runPrepare(curEnv)
+          runPrepare()
         }
       })
-      .catch(() => runPrepare(curEnv))
+      .catch(() => runPrepare())
   }
 
-  function runPrepare(curEnv) {
+  function runPrepare() {
     setScenarioStage((prev) => ({ ...prev, mode: 'prep' }))
-    api('/api/prepare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionIdRef.current, env: curEnv }),
-    })
-      .then((r) => r.json())
-      .then((data) => pollPrep(data.run_id, curEnv))
+    prepareTaskBuilderRun(sessionIdRef.current, {})
+      .then(({ data }) => pollPrep(data.job_id))
       .catch(() =>
         setScenarioStage((prev) => ({ ...prev, mode: 'error', error: 'Could not start scenario preparation.' }))
       )
@@ -414,12 +290,11 @@ export default function App() {
 
   // Poll the run state (not SSE) so we can show each stage's LIVE LOG tail —
   // you watch input files being generated, right in the panel.
-  function pollPrep(jobId, curEnv) {
+  function pollPrep(jobId) {
     clearTimeout(prepTimerRef.current)
     const tick = () => {
-      api(`/api/runs/${jobId}/state?env=${curEnv}`)
-        .then((r) => r.json())
-        .then((data) => {
+      getTaskBuilderRun(jobId)
+        .then(({ data }) => {
           const byLabel = {}
           for (const s of data.stages || []) byLabel[s.label] = s
           const prep = PREP_STAGES.map(([key, label]) => {
@@ -430,9 +305,8 @@ export default function App() {
           const st = data.status
           if (st === 'done') {
             scenariosPreparedRef.current = true
-            api(`/api/scenarios?session_id=${encodeURIComponent(sessionIdRef.current)}&env=${curEnv}`)
-              .then((r) => r.json())
-              .then((d) => setScenarioStage((prev) => ({ ...prev, mode: 'list', list: (d && d.scenarios) || [] })))
+            getTaskBuilderScenarios(sessionIdRef.current)
+              .then(({ data: d }) => setScenarioStage((prev) => ({ ...prev, mode: 'list', list: (d && d.scenarios) || [] })))
               .catch(() =>
                 setScenarioStage((prev) => ({
                   ...prev,
@@ -458,7 +332,6 @@ export default function App() {
   function onBuildTask() {
     if (generatingRef.current || !isBriefComplete(panelStateRef.current.brief) || !sessionIdRef.current)
       return
-    const curEnv = envRef.current
     const instr = composeInstructions()
     instructionsRef.current = instr
     selectedScenarioRef.current = pickedScenario
@@ -476,19 +349,12 @@ export default function App() {
       result: null,
       error: '',
     })
-    api('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionIdRef.current,
-        env: curEnv,
-        instructions: instr,
-        selected_scenario: selectedScenarioRef.current,
-        scenarios_prepared: scenariosPreparedRef.current,
-      }),
+    generateTaskBuilderRun(sessionIdRef.current, {
+      instructions: instr,
+      selected_scenario: selectedScenarioRef.current,
+      scenarios_prepared: scenariosPreparedRef.current,
     })
-      .then((r) => r.json())
-      .then((data) => pollBuild(data.run_id, curEnv))
+      .then(({ data }) => pollBuild(data.job_id))
       .catch(() => {
         generatingRef.current = false
         setGenerating(false)
@@ -499,12 +365,11 @@ export default function App() {
   // Poll the generation job so ALL five stages + their logs show live in the
   // wizard — same view the prep step uses, so the pipeline doesn't vanish
   // after Build.
-  function pollBuild(jobId, curEnv) {
+  function pollBuild(jobId) {
     clearTimeout(buildTimerRef.current)
     const tick = () => {
-      api(`/api/runs/${jobId}/state?env=${curEnv}`)
-        .then((r) => r.json())
-        .then((data) => {
+      getTaskBuilderRun(jobId)
+        .then(({ data }) => {
           const byLabel = {}
           for (const s of data.stages || []) byLabel[s.label] = s
           const stages = PIPELINE_STAGES.map(([key, label]) => {
@@ -517,7 +382,7 @@ export default function App() {
             generatingRef.current = false
             setGenerating(false)
             setBuildStage((prev) => ({ ...prev, status: 'done', result: { task_id: data.result_task_id, details: null } }))
-            if (data.result_task_id) fetchTaskDetails(data.result_task_id, curEnv)
+            if (data.result_task_id) fetchTaskDetails(data.result_task_id)
             return
           }
           if (st === 'failed' || st === 'cancelled') {
@@ -539,8 +404,8 @@ export default function App() {
   // outcomes — same card the recruiter app shows when sharing a task).
   // Fetched once the build reports done; patched into buildStage.result so
   // the wizard's final step and the chat done-card can render it.
-  function fetchTaskDetails(taskId, curEnv) {
-    fetchTaskDetail(taskId, curEnv).then((details) => {
+  function fetchTaskDetails(taskId) {
+    fetchTaskDetail(taskId).then((details) => {
       if (!details) return
       setBuildStage((prev) =>
         prev.result?.task_id === taskId
@@ -558,7 +423,7 @@ export default function App() {
   function hydrateTask(m) {
     if (!m.task_id || hydratedTasksRef.current.has(m.id)) return
     hydratedTasksRef.current.add(m.id)
-    fetchTaskDetail(m.task_id, m.env || envRef.current).then((details) => {
+    fetchTaskDetail(m.task_id).then((details) => {
       if (details) patchMessage(m.id, { task: details })
     })
   }
@@ -573,7 +438,6 @@ export default function App() {
         task_name: '',
         task_type: '',
         competencies: '',
-        env: envRef.current,
         task_url: '',
         outcome: '',
         detail: '',
@@ -623,10 +487,6 @@ export default function App() {
   // ---- header actions ------------------------------------------------------
   function newTask() {
     if (!window.confirm('Discard this conversation and start a new task?')) return
-    if (activeStreamRef.current) {
-      activeStreamRef.current.close()
-      activeStreamRef.current = null
-    }
     liveMessagesRef.current = null
     setViewingId(null)
     setMessages([])
@@ -674,10 +534,6 @@ export default function App() {
     setInput(v)
     inputRef.current = v
   }
-  function onEnvChange(v) {
-    setEnv(v)
-    envRef.current = v
-  }
   function onSlotClick(def) {
     const v = `Change the ${def.label.toLowerCase()} to `
     setInput(v)
@@ -707,8 +563,6 @@ export default function App() {
     generating,
     genDisabled,
     onSlotClick,
-    env,
-    onEnvChange,
     onGenerate: openWizard,
     genHint,
   }

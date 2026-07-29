@@ -1,0 +1,142 @@
+name: Build & Push Task Builder FE Image — DEV (GHCR)
+
+# Fires only after CI passes on main — same shape as recruiter-utkrusht's
+# devapp-image.yml. PRs never reach here, so they never touch the deploy
+# environment or its secrets.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: task-builder-fe-dev
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: task-builder-fe-dev
+    runs-on: [self-hosted, udev1]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The commit CI actually validated — not whatever main points at now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          name: persistent-builder
+          cleanup: false
+
+      - name: Resolve recruiter-client version (@dev)
+        id: client
+        # Track the dev dist-tag instead of the committed pin, so a backend route
+        # that merged an hour ago is already callable here. Fails loudly rather
+        # than silently building against a stale pin.
+        run: |
+          VER=$(curl -fsS \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://npm.pkg.github.com/@ngm9%2Frecruiter-client" | jq -r '."dist-tags".dev')
+          [ -n "$VER" ] && [ "$VER" != "null" ] || { echo "::error::could not resolve @ngm9/recruiter-client@dev"; exit 1; }
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Resolved @ngm9/recruiter-client@dev -> $VER"
+
+      - name: Build and push (task-builder-fe dev)
+        uses: docker/build-push-action@v6
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/ngm9/utkrusht-task-builder-fe-dev:latest
+            ghcr.io/ngm9/utkrusht-task-builder-fe-dev:sha-${{ github.event.workflow_run.head_sha || github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # No VITE_* here: the app is configured at RUNTIME from the
+          # deployment's own environment (docker-entrypoint.sh -> /env.js), so
+          # the image carries no environment-specific values and the same build
+          # can run anywhere. CLIENT_VERSION stays a build arg because it picks
+          # an npm dependency.
+          build-args: |
+            CLIENT_VERSION=${{ steps.client.outputs.version }}
+          secrets: |
+            node_auth_token=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up disk space for Trivy
+        run: |
+          echo "=== Disk usage before cleanup ==="
+          df -h /
+          docker buildx prune --force --all 2>/dev/null || true
+          sudo find /tmp -maxdepth 1 -name 'trivy-*' -type d -exec rm -rf {} + 2>/dev/null || true
+          sudo rm -rf /tmp/trivy-cache-task-builder-fe-dev/db 2>/dev/null || true
+          docker system prune -af --volumes 2>/dev/null || true
+          echo "=== Disk usage after cleanup ==="
+          df -h /
+
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &>/dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          fi
+
+      - name: Run Trivy vulnerability scan
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          trivy image \
+            --image-src remote \
+            --scanners vuln,misconfig \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --output trivy-results.sarif \
+            --exit-code 0 \
+            --cache-dir /tmp/trivy-cache-task-builder-fe-dev \
+            ghcr.io/ngm9/utkrusht-task-builder-fe-dev:latest
+
+      - name: Upload Trivy scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-task-builder-fe-dev
+          path: trivy-results.sarif
+          retention-days: 90
+
+      - name: Clean up Trivy temp files
+        if: always()
+        run: |
+          sudo find /tmp -maxdepth 1 -name 'trivy-*' -type d -exec rm -rf {} + 2>/dev/null || true
+          sudo rm -rf /tmp/trivy-cache-task-builder-fe-dev/db 2>/dev/null || true
+
+      - name: Trigger Coolify deploy
+        # GET, matching recruiter-utkrusht's working deploy step. Coolify's
+        # deploy webhook answers GET; the backend's task-builder workflow uses
+        # POST and has been timing out.
+        run: |
+          curl -fsS -X GET \
+          -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_API_TOKEN }}" \
+          "${{ secrets.COOLIFY_TASK_BUILDER_FE_DEV_DEPLOY_WEBHOOK }}"
+
+      - name: Prune buildx cache
+        if: always()
+        run: docker buildx prune --force --all 2>/dev/null || true

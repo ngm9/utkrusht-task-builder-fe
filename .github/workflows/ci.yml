@@ -1,0 +1,66 @@
+name: CI
+
+# Gates the image build: dev-image.yml runs on this workflow's SUCCESS, so a
+# red CI means no image and no deploy. Also runs on PRs, where it is the only
+# check — the image job deliberately never runs for a PR.
+on:
+  push:
+    branches: [main, release, staging]
+  pull_request:
+    branches: [main, release]
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Install, test & build
+    runs-on: ubuntu-latest
+    env:
+      # @ngm9/recruiter-client lives on GitHub Packages, not public npm, so even
+      # a plain `npm ci` needs a token for that scope. .npmrc reads it from here.
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Mirror the image builds (dev-image.yml -> @dev, prod-image.yml ->
+      # @latest): they float @ngm9/recruiter-client to the channel dist-tag on
+      # top of the lockfile, so CI must build against the same version the image
+      # will ship — not the committed baseline pin. Without this, CI can pass
+      # against an old pin while the deployed image builds against a client that
+      # renamed or removed an operation. --no-save keeps package.json and the
+      # lockfile untouched. base_ref is set on PRs, ref_name covers pushes.
+      - name: Sync recruiter-client to channel tag
+        run: |
+          set -euo pipefail
+          TARGET="${{ github.base_ref || github.ref_name }}"
+          TAG=$([ "$TARGET" = "release" ] && echo latest || echo dev)
+          VER=$(curl -fsS -H "Authorization: Bearer $NODE_AUTH_TOKEN" \
+            "https://npm.pkg.github.com/@ngm9%2Frecruiter-client" | jq -r ".\"dist-tags\".$TAG")
+          [ -n "$VER" ] && [ "$VER" != "null" ] || { echo "::error::could not resolve @ngm9/recruiter-client@$TAG"; exit 1; }
+          npm install --no-save "@ngm9/recruiter-client@$VER"
+          echo "CI checking against @ngm9/recruiter-client@$VER ($TAG)"
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        # The real gate. A missing export from @ngm9/recruiter-client — the most
+        # likely breakage, since the client is regenerated from the backend's
+        # OpenAPI spec — fails here rather than in the browser.
+        run: npm run build

@@ -2,8 +2,12 @@ node_modules
 dist
 dist-ssr
 *.local
+# Ignore every env file by default and opt the template back in, rather than
+# listing variants. `.env.*.local` alone did not cover `.env.vercel`,
+# `.env.production` or `.env.temp` — files that carry real keys.
 .env
-.env.*.local
+.env.*
+!.env.example
 .DS_Store
 npm-debug.log*
 yarn-error.log*

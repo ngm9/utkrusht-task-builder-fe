@@ -5,8 +5,9 @@
 // event (autocapture included), which is what makes a session replay searchable
 // by conversation_id / generation_run_id — find the video from the id.
 import posthog from 'posthog-js'
+import { env } from './runtime-env.js'
 
-const ENABLED = !!import.meta.env.VITE_POSTHOG_KEY
+const ENABLED = !!env('VITE_POSTHOG_KEY')
 
 export function registerIds(props) {
   if (ENABLED) posthog.register(props)
