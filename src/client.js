@@ -7,19 +7,19 @@
 // pointed at a guarded route.
 import { configureRecruiterClient } from '@ngm9/recruiter-client'
 import { getJwt } from './auth.js'
+import { env } from './runtime-env.js'
 
-// EMPTY in local dev -> relative /v2/*, which the Vite dev-server proxy
-// forwards to the local backend, same-origin, no CORS.
+// EMPTY under `vite dev` -> relative /v2/*, which the dev-server proxy forwards
+// to the local backend, same-origin, no CORS.
 //
-// SET in a deployed build -> absolute backend URL, called cross-origin, so the
-// deployed frontend's origin MUST be in the backend's FLASK_CORS_ORIGINS.
-// Vite inlines this at build time, so it is a Docker BUILD ARG, never a runtime
-// env var — setting it in Coolify's runtime environment does nothing.
+// In a container it comes from the SERVICE ENVIRONMENT via /env.js — set it in
+// Coolify and restart, no rebuild. The entrypoint refuses to start without it,
+// because an empty value would send every /v2/* call into nginx's SPA fallback
+// and return index.html where this client expects JSON.
 //
-// This was previously hardcoded to '', which meant a container build ignored
-// VITE_API_BASE entirely and every /v2/* call hit nginx's SPA fallback and came
-// back as index.html where the client expected JSON.
-const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '')
+// Cross-origin either way once deployed, so the frontend's origin must be in
+// the backend's FLASK_CORS_ORIGINS.
+const API_BASE = env('VITE_API_BASE').replace(/\/+$/, '')
 
 configureRecruiterClient({
   baseUrl: API_BASE,

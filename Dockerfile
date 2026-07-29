@@ -30,32 +30,27 @@ RUN --mount=type=secret,id=node_auth_token \
 
 COPY . .
 
-# Every VITE_* below is inlined into the JS bundle by `vite build`. They are
-# BUILD ARGS on purpose — setting them as Coolify runtime env does nothing,
-# because the bundle is already compiled by then.
-ARG VITE_API_BASE=""
-ARG VITE_SUPABASE_URL=""
-ARG VITE_SUPABASE_ANON_KEY=""
-ARG VITE_POSTHOG_KEY=""
-ARG VITE_POSTHOG_HOST=""
-ENV VITE_API_BASE=$VITE_API_BASE \
-    VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
-    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
-    VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY \
-    VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
-
-# Deliberately NOT passed: VITE_DEV_JWT. Vite would bake it into the bundle for
-# anyone to read, and it buys nothing — every /v2/task-builder/* route is PUBLIC
-# (see PUBLIC_ROUTES in the backend's auth_middleware.py). A deployed build must
-# never carry a real testmaker token.
+# No VITE_* build args. Configuration is injected at RUNTIME by
+# docker-entrypoint.sh, which writes /env.js from the container's environment;
+# src/runtime-env.js reads it. That makes one image runnable in every
+# environment and configurable from Coolify without a rebuild.
 #
-# VITE_INTERNAL_TOKEN was declared here but read by no code; dropped rather than
-# left as config that looks load-bearing and is not.
+# CLIENT_VERSION above stays a build arg because it selects an npm dependency —
+# that genuinely cannot be deferred to runtime.
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# Writes /env.js from this container's environment, then execs nginx. Refuses to
+# start if VITE_API_BASE is unset — better a container that will not boot than
+# one that serves an app pointing at the wrong origin.
+# Named /entrypoint.sh, not /docker-entrypoint.sh — the nginx image already ships
+# one at that path and overwriting it would drop its own init.
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1

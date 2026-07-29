@@ -4,11 +4,14 @@
 // The staging FE talks to the recruiter Flask API, which authenticates a
 // testmaker JWT (Authorization: Bearer <jwt> + X-Token-Source: recruiter).
 //
-// ⚠️  SECURITY: VITE_DEV_JWT is baked into the client bundle at build time, so
-// it is readable by anyone who loads the app. This is a LOCAL/STAGING dev aid —
-// leave it empty to keep the prompt-once flow (token stays out of the bundle).
+// ⚠️  SECURITY: VITE_DEV_JWT is readable by anyone who loads the app, whether it
+// arrives via the bundle or /env.js. This is a LOCAL dev aid — leave it empty in
+// any deployed environment to keep the prompt-once flow. It is deliberately NOT
+// emitted by docker-entrypoint.sh, so a container cannot set it at all.
+import { env } from './runtime-env.js'
+
 const JWT_KEY = 'taskbuilder.jwt'
-const ENV_JWT = (import.meta.env.VITE_DEV_JWT || '').trim()
+const ENV_JWT = env('VITE_DEV_JWT').trim()
 
 let jwt = ''
 try {

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ROLE_SUGGESTIONS, POPULAR_STACKS, FAMOUS_SKILLS } from '../constants.js'
+import { env } from '../runtime-env.js'
 
 // Skills come straight from the dev Supabase `competencies` table via its REST
 // endpoint — the table has a public SELECT policy, so the anon key is enough
 // and no backend endpoint is needed. Set these two envs (Vercel / local .env):
 //   VITE_SUPABASE_URL       = https://<ref>.supabase.co
 //   VITE_SUPABASE_ANON_KEY  = <anon key>
-const SB_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
-const SB_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+const SB_URL = env('VITE_SUPABASE_URL').replace(/\/+$/, '')
+const SB_KEY = env('VITE_SUPABASE_ANON_KEY').trim()
 
 const PROF_ORDER = { BEGINNER: 0, BASIC: 1, INTERMEDIATE: 2, ADVANCED: 3 }
 const PROF_SHORT = { BEGINNER: 'Be', BASIC: 'Ba', INTERMEDIATE: 'In', ADVANCED: 'Ad' }

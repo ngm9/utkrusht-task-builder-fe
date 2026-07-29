@@ -11,6 +11,10 @@
 </head>
 <body>
   <div id="root"></div>
+  <!-- Runtime config, written by docker-entrypoint.sh from the container's
+       environment. MUST load before the bundle. 404s under `vite dev`, which is
+       harmless — runtime-env.js falls back to import.meta.env from .env there. -->
+  <script src="/env.js"></script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

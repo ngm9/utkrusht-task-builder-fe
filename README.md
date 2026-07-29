@@ -2,8 +2,12 @@
 
 The web UI for the Utkrusht **Task Builder**: a chat that interviews you for a
 coding-assessment brief, then runs the generation pipeline with live progress.
-Built with **React + Vite**. The backend is a **separate service** (FastAPI) —
-this app talks to it over `/api/*` + Server-Sent Events.
+Built with **React + Vite**, served by nginx in production.
+
+The backend is the **Flask service** in `ngm9/Utkrushta` (`/v2/task-builder/*`),
+reached through the generated `@ngm9/recruiter-client`. Run progress is
+**polled**, not streamed — there is deliberately no SSE endpoint, because a
+stream would pin a sync gunicorn worker for the whole multi-minute run.
 
 ## Develop
 
@@ -13,7 +17,7 @@ cp .env.example .env      # then edit — see Environment below
 npm run dev               # http://localhost:5173
 ```
 
-By default `VITE_API_BASE` is empty, so the app calls relative `/api/*` and the
+By default `VITE_API_BASE` is empty, so the app calls relative `/v2/*` and the
 Vite dev server proxies them to `VITE_DEV_PROXY_TARGET` — same-origin in the
 browser, so **no CORS is needed in dev**.
 
@@ -21,31 +25,14 @@ browser, so **no CORS is needed in dev**.
 
 | Var | Purpose |
 |-----|---------|
-| `VITE_API_BASE` | Absolute backend URL. **Leave empty for dev** (uses the proxy). In a production build it is baked in at build time and the app calls it cross-origin — the backend must send CORS headers (it does, via its `CORS_ALLOW_ORIGINS`). |
-| `VITE_DEV_PROXY_TARGET` | Dev-only: where `vite dev` proxies `/api` to when `VITE_API_BASE` is empty. |
-| `VITE_INTERNAL_TOKEN` | Optional backend access token. When set, the UI auto-attaches it and never prompts. ⚠️ **See the security note below.** |
+| `VITE_API_BASE` | Flask origin. **Leave empty for dev** (uses the proxy). Set in a deployment — see "Configuration is RUNTIME" below. |
+| `VITE_DEV_PROXY_TARGET` | Dev-only: where `vite dev` proxies `/v2` to when `VITE_API_BASE` is empty. |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Read directly by the skills panel and task-detail card. |
+| `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` | Optional analytics; omit to disable. |
+| `VITE_DEV_JWT` | **Local only.** Every task-builder route is public, so this is unnecessary in any deployment and the container entrypoint refuses to emit it. |
 
-`VITE_*` values are **compile-time**. A production build bakes them into the
-bundle, so set them as build args (see `Dockerfile`), not runtime envs.
-
-## Access token
-
-Deployed backends set `INTERNAL_PROXY_TOKEN`; every `/api/*` call must carry it
-as `X-Internal-Token` (the SSE stream passes it as `?access_token=`, since
-`EventSource` cannot set headers).
-
-Two ways to supply it:
-
-1. **Prompt (default, secure).** The UI prompts on the first `403`, stores the
-   token in `localStorage`, and attaches it from then on. The token never
-   appears in the shipped code.
-2. **`VITE_INTERNAL_TOKEN` (convenient, not secret).** Set it and the app
-   auto-attaches the token — no prompt. ⚠️ Vite **bakes it into the client
-   bundle**, so anyone who loads the app can read it (View Source / DevTools);
-   the token then no longer protects the API. Only use this when the frontend
-   itself is access-controlled or the API is not sensitive. For a public app,
-   prefer the prompt, or put a real auth layer in front (e.g. a server-side
-   proxy that injects the token).
+In `vite dev` these come from `.env`. In a container they come from the service
+environment at startup, not from the build.
 
 ## Build / deploy
 
@@ -56,12 +43,39 @@ npm run build             # → dist/  (static files)
 Containerized (multi-stage Node build → nginx):
 
 ```bash
-docker build --build-arg VITE_API_BASE=https://your-backend-url -t task-builder-web .
-docker run -p 8080:80 task-builder-web
+docker build -t task-builder-web .
+docker run -p 8080:80 -e VITE_API_BASE=https://devflapi.utkrusht.ai task-builder-web
 ```
 
-Deploy the image as its own service (Coolify / Dokploy), publish port `80`, and
-set the `VITE_API_BASE` **build arg** to the deployed backend URL.
+Note the backend URL is a `-e` **runtime** flag, not a `--build-arg`.
+
+### Configuration is RUNTIME, not build-time
+
+`docker-entrypoint.sh` writes `/env.js` from the container's own environment on
+every start; `index.html` loads it before the bundle and `src/runtime-env.js`
+reads it. So the deployed app is configured by **Coolify environment variables**:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `VITE_API_BASE` | **yes** | Flask origin. The container refuses to start without it. |
+| `VITE_SUPABASE_URL` | for the skills panel | |
+| `VITE_SUPABASE_ANON_KEY` | for the skills panel | |
+| `VITE_POSTHOG_KEY` / `_HOST` | no | omit to disable analytics |
+
+Change one, restart the service — **no rebuild**. The same image runs in every
+environment, which is why the workflows pass no `VITE_*` build args.
+
+Two consequences:
+
+- `/env.js` is served `no-store`. Caching it would keep returning visitors on
+  the old backend after a config change.
+- These values are **public** — anyone can fetch `/env.js`, exactly as they
+  could previously read them out of the bundle. Runtime injection buys
+  operability, not secrecy. Never put a real secret here. `VITE_DEV_JWT` is
+  deliberately not emitted by the entrypoint at all.
+
+`CLIENT_VERSION` remains a build arg: it selects an npm dependency, which
+genuinely cannot be deferred to runtime.
 
 ### CI/CD
 
@@ -105,9 +119,10 @@ seam — do not just add a token to the bundle.
 ```
 src/
   main.jsx          entry
-  App.jsx           orchestrator: session, chat, brief, generation, SSE, persistence
-  api.js            fetch wrapper + token handling + SSE URL helper
-  config.js         API_BASE from VITE_API_BASE
+  App.jsx           orchestrator: session, chat, brief, generation polling, persistence
+  client.js         configures @ngm9/recruiter-client + re-exports its ops
+  runtime-env.js    reads /env.js (runtime) with an import.meta.env fallback
+  auth.js           optional dev JWT holder
   persist.js        transcript persistence (localStorage)
   lib.js            scenario parser + id helper
   constants.js      slot defs, pipeline stages, starters

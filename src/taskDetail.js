@@ -7,8 +7,10 @@
 // straight from Supabase (anon SELECT, same credentials the skills panel
 // uses) and apply the identical transform client-side. Dev env only — the
 // anon key in the build is the dev project's.
-const SB_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
-const SB_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+import { env } from './runtime-env.js'
+
+const SB_URL = env('VITE_SUPABASE_URL').replace(/\/+$/, '')
+const SB_KEY = env('VITE_SUPABASE_ANON_KEY').trim()
 
 const DEFAULT_TASK_TIME_MINS = 45 // recruiter SAMPLE_QUESTIONS.DEFAULT_TASK_TIME_MINS
 
