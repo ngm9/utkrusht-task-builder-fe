@@ -1,6 +1,6 @@
 name: CI
 
-# Gates the image build: devapp-image.yml runs on this workflow's SUCCESS, so a
+# Gates the image build: dev-image.yml runs on this workflow's SUCCESS, so a
 # red CI means no image and no deploy. Also runs on PRs, where it is the only
 # check — the image job deliberately never runs for a PR.
 on:
@@ -38,7 +38,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Mirror the image builds (devapp-image.yml -> @dev, app-image.yml ->
+      # Mirror the image builds (dev-image.yml -> @dev, prod-image.yml ->
       # @latest): they float @ngm9/recruiter-client to the channel dist-tag on
       # top of the lockfile, so CI must build against the same version the image
       # will ship — not the committed baseline pin. Without this, CI can pass

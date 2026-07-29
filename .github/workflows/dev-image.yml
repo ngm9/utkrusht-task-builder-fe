@@ -1,20 +1,12 @@
-name: Build & Push Task Builder FE Image — PROD (GHCR)
+name: Build & Push Task Builder FE Image — DEV (GHCR)
 
-# Production counterpart of devapp-image.yml. Differences, all deliberate:
-#   branch      main    -> release
-#   client tag  @dev    -> @latest
-#   environment task-builder-fe-dev -> task-builder-fe-prod
-#   image       ...-fe-dev          -> ...-fe-prod
-#   webhook     COOLIFY_TASK_BUILDER_FE_DEV_...  -> ..._PROD_...
-#
-# The webhook secret name is spelled PROD on purpose. recruiter-utkrusht's
-# app-image.yml calls COOLIFY_DEVAPP_DEPLOY_WEBHOOK from its prod environment,
-# which only works if that environment silently overrides a dev-named secret —
-# one missing override and a production build deploys the dev app.
+# Fires only after CI passes on main — same shape as recruiter-utkrusht's
+# devapp-image.yml. PRs never reach here, so they never touch the deploy
+# environment or its secrets.
 on:
   workflow_run:
     workflows: ["CI"]
-    branches: [release]
+    branches: [main]
     types: [completed]
   workflow_dispatch: {}
 
@@ -23,18 +15,19 @@ permissions:
   packages: write
 
 concurrency:
-  group: task-builder-fe-prod
-  cancel-in-progress: false   # never cancel a prod deploy mid-flight
+  group: task-builder-fe-dev
+  cancel-in-progress: true
 
 jobs:
   build:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    environment: task-builder-fe-prod
+    environment: task-builder-fe-dev
     runs-on: [self-hosted, udev1]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # The commit CI actually validated — not whatever main points at now.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Login to GHCR
@@ -51,41 +44,20 @@ jobs:
           name: persistent-builder
           cleanup: false
 
-      - name: Resolve recruiter-client version (@latest)
+      - name: Resolve recruiter-client version (@dev)
         id: client
-        # @latest, NOT @dev — prod must build against the stable channel.
+        # Track the dev dist-tag instead of the committed pin, so a backend route
+        # that merged an hour ago is already callable here. Fails loudly rather
+        # than silently building against a stale pin.
         run: |
-          set -euo pipefail
           VER=$(curl -fsS \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://npm.pkg.github.com/@ngm9%2Frecruiter-client" | jq -r '."dist-tags".latest')
-          [ -n "$VER" ] && [ "$VER" != "null" ] || { echo "::error::could not resolve @ngm9/recruiter-client@latest"; exit 1; }
+            "https://npm.pkg.github.com/@ngm9%2Frecruiter-client" | jq -r '."dist-tags".dev')
+          [ -n "$VER" ] && [ "$VER" != "null" ] || { echo "::error::could not resolve @ngm9/recruiter-client@dev"; exit 1; }
           echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "Resolved @ngm9/recruiter-client@latest -> $VER"
+          echo "Resolved @ngm9/recruiter-client@dev -> $VER"
 
-      - name: Preflight — does the stable client expose the task-builder API?
-        # As of 2026-07, @latest is 2.0.0 and carries NO task-builder operations:
-        # those routes reached main after 2.0.0 was cut, so they exist only on
-        # the @dev channel. Without this check the build dies deep in rollup
-        # with "does not provide an export named 'getTaskBuilderGreeting'",
-        # which reads like a frontend bug and is not one.
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          VER="${{ steps.client.outputs.version }}"
-          npm pack "@ngm9/recruiter-client@${VER}" --pack-destination /tmp/rc >/dev/null
-          tar xzf /tmp/rc/*.tgz -C /tmp/rc
-          if ! grep -rq 'getTaskBuilderGreeting' /tmp/rc/package; then
-            echo "::error::@ngm9/recruiter-client@${VER} (the @latest channel) has no task-builder operations."
-            echo "::error::This frontend cannot be built for production until a STABLE client carrying them is published."
-            echo "::error::That needs the backend's task-builder routes cut to its release channel first — see recruiter-client's publish workflow."
-            exit 1
-          fi
-          echo "OK: @latest ($VER) exposes the task-builder operations."
-          rm -rf /tmp/rc
-
-      - name: Build and push (task-builder-fe prod)
+      - name: Build and push (task-builder-fe dev)
         uses: docker/build-push-action@v6
         with:
           builder: ${{ steps.buildx.outputs.name }}
@@ -96,13 +68,12 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/ngm9/utkrusht-task-builder-fe-prod:latest
-            ghcr.io/ngm9/utkrusht-task-builder-fe-prod:sha-${{ github.event.workflow_run.head_sha || github.sha }}
+            ghcr.io/ngm9/utkrusht-task-builder-fe-dev:latest
+            ghcr.io/ngm9/utkrusht-task-builder-fe-dev:sha-${{ github.event.workflow_run.head_sha || github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # These resolve from the task-builder-fe-prod environment, so
-          # VITE_SUPABASE_* MUST point at the PROD Supabase project and
-          # VITE_API_BASE at the PROD Flask host.
+          # VITE_* are inlined by `vite build`, so they must be BUILD args.
+          # Coolify runtime env cannot influence an already-compiled bundle.
           build-args: |
             VITE_API_BASE=${{ secrets.VITE_API_BASE }}
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
@@ -119,7 +90,7 @@ jobs:
           df -h /
           docker buildx prune --force --all 2>/dev/null || true
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -type d -exec rm -rf {} + 2>/dev/null || true
-          sudo rm -rf /tmp/trivy-cache-task-builder-fe-prod/db 2>/dev/null || true
+          sudo rm -rf /tmp/trivy-cache-task-builder-fe-dev/db 2>/dev/null || true
           docker system prune -af --volumes 2>/dev/null || true
           echo "=== Disk usage after cleanup ==="
           df -h /
@@ -142,14 +113,14 @@ jobs:
             --format sarif \
             --output trivy-results.sarif \
             --exit-code 0 \
-            --cache-dir /tmp/trivy-cache-task-builder-fe-prod \
-            ghcr.io/ngm9/utkrusht-task-builder-fe-prod:latest
+            --cache-dir /tmp/trivy-cache-task-builder-fe-dev \
+            ghcr.io/ngm9/utkrusht-task-builder-fe-dev:latest
 
       - name: Upload Trivy scan results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: trivy-task-builder-fe-prod
+          name: trivy-task-builder-fe-dev
           path: trivy-results.sarif
           retention-days: 90
 
@@ -157,13 +128,16 @@ jobs:
         if: always()
         run: |
           sudo find /tmp -maxdepth 1 -name 'trivy-*' -type d -exec rm -rf {} + 2>/dev/null || true
-          sudo rm -rf /tmp/trivy-cache-task-builder-fe-prod/db 2>/dev/null || true
+          sudo rm -rf /tmp/trivy-cache-task-builder-fe-dev/db 2>/dev/null || true
 
       - name: Trigger Coolify deploy
+        # GET, matching recruiter-utkrusht's working deploy step. Coolify's
+        # deploy webhook answers GET; the backend's task-builder workflow uses
+        # POST and has been timing out.
         run: |
           curl -fsS -X GET \
           -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_API_TOKEN }}" \
-          "${{ secrets.COOLIFY_TASK_BUILDER_FE_PROD_DEPLOY_WEBHOOK }}"
+          "${{ secrets.COOLIFY_TASK_BUILDER_FE_DEV_DEPLOY_WEBHOOK }}"
 
       - name: Prune buildx cache
         if: always()

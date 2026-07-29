@@ -68,8 +68,8 @@ set the `VITE_API_BASE` **build arg** to the deployed backend URL.
 | Workflow | Trigger | Client channel | Image |
 |---|---|---|---|
 | `ci.yml` | push / PR to `main`, `release`, `staging` | resolves `@dev`, or `@latest` for `release` | — |
-| `devapp-image.yml` | CI success on `main` | `@dev` | `ghcr.io/ngm9/utkrusht-task-builder-fe-dev` |
-| `app-image.yml` | CI success on `release` | `@latest` | `ghcr.io/ngm9/utkrusht-task-builder-fe-prod` |
+| `dev-image.yml` | CI success on `main` | `@dev` | `ghcr.io/ngm9/utkrusht-task-builder-fe-dev` |
+| `prod-image.yml` | CI success on `release` | `@latest` | `ghcr.io/ngm9/utkrusht-task-builder-fe-prod` |
 
 The committed `@ngm9/recruiter-client` pin is only a resolvable baseline for
 local installs. Every build — CI and image alike — floats it to the channel
@@ -78,7 +78,7 @@ published client and `main`/`release` never diverge on the pin.
 
 > **Production is blocked until a stable client ships the task-builder API.**
 > The `@latest` channel is currently `2.0.0`, which predates those routes and
-> carries none of them; they exist only on `@dev`. `app-image.yml` preflights
+> carries none of them; they exist only on `@dev`. `prod-image.yml` preflights
 > this and fails with an explicit message rather than a rollup export error.
 
 ### Why this app calls Flask directly from the browser
