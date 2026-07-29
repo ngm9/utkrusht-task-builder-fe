@@ -724,3 +724,68 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   border:1px solid var(--border) !important;
 }
 .driver-popover.uk-tour .driver-popover-close-btn { color:var(--faint); }
+
+
+/* ── /trace — pipeline run viewer ──────────────────────────────────────
+   Internal debugging surface, so it favours density over the roominess of
+   the chat: many runs and long logs on screen at once. */
+.trace-page { padding:22px 26px; height:100%; overflow-y:auto; }
+.trace-page h1 { font-size:18px; margin:0 0 16px; letter-spacing:-0.02em; }
+.trace-page h3 { font-size:13px; margin:18px 0 6px; color:var(--uk-green-deep); }
+.trace-empty { color:var(--muted); font-size:13px; padding:10px 0; }
+.trace-faint { color:var(--faint); font-size:12px; }
+
+.trace-layout { display:grid; grid-template-columns:300px minmax(0,1fr);
+  gap:18px; align-items:start; }
+
+.trace-list { list-style:none; margin:0; padding:0; display:flex;
+  flex-direction:column; gap:4px; max-height:78vh; overflow-y:auto; }
+.trace-list button { width:100%; text-align:left; background:var(--card);
+  border:0.5px solid var(--border); border-radius:8px; padding:8px 10px;
+  font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:2px; }
+.trace-list button:hover { border-color:var(--uk-green-mid); }
+.trace-list button.on { background:var(--green-tint);
+  border-color:var(--uk-green); }
+.trace-run-top { font-size:13px; color:var(--text); }
+
+.trace-pane { min-width:0; background:var(--card);
+  border:0.5px solid var(--border); border-radius:var(--radius); padding:16px 18px; }
+.trace-meta { font-size:13px; color:var(--muted); display:flex;
+  flex-direction:column; gap:2px; }
+.trace-meta code { background:var(--bg); padding:1px 5px; border-radius:5px;
+  font-size:12px; }
+
+.trace-stages { list-style:none; margin:0; padding:0; }
+.trace-stages li { display:flex; justify-content:space-between; gap:10px;
+  padding:5px 8px; border-radius:6px; font-size:13px; }
+.trace-stages li.ok  { background:var(--green-tint); }
+.trace-stages li.bad { background:var(--amber-tint); color:var(--amber-text); }
+
+.trace-logbtns { display:flex; flex-wrap:wrap; gap:6px; }
+.trace-chip { background:var(--card); border:0.5px solid var(--border);
+  border-radius:999px; padding:4px 12px; font:inherit; font-size:12px;
+  color:var(--muted); cursor:pointer; }
+.trace-chip:hover { border-color:var(--uk-green-mid); }
+.trace-chip.on { background:var(--uk-green); color:#fff;
+  border-color:var(--uk-green); }
+
+/* Logs are the reason this page exists — monospace, scrollable, and never
+   wrapped, because a wrapped stack trace is unreadable. */
+.trace-pre { margin:10px 0 0; background:#1c1917; color:#e7e5e4;
+  border-radius:8px; padding:12px 14px; font-size:12px; line-height:1.55;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  max-height:52vh; overflow:auto; white-space:pre; }
+
+.trace-calls { list-style:none; margin:0; padding:0; display:flex;
+  flex-direction:column; gap:8px; }
+.trace-calls li { border:0.5px solid var(--border); border-radius:8px;
+  padding:8px 10px; }
+.trace-callhead { display:flex; justify-content:space-between; gap:10px;
+  align-items:baseline; font-size:13px; }
+.trace-calls summary { cursor:pointer; font-size:12px; color:var(--muted);
+  margin-top:4px; }
+
+@media (max-width:900px) {
+  .trace-layout { grid-template-columns:minmax(0,1fr); }
+  .trace-list { max-height:none; }
+}
