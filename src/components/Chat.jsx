@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import Markdown from './Markdown.jsx'
 import BriefCard from './BriefCard.jsx'
 import TaskDetailCard from './TaskDetailCard.jsx'
+import RequestCard from './RequestCard.jsx'
 
 // Chat message renderers. `messages` is the source of truth; each item has a
 // `kind` (bubble | divider | stage | done | brief). Mirrors the DOM the static
@@ -115,7 +116,7 @@ function Fragment({ label, value }) {
   )
 }
 
-export default function Chat({ messages, briefUi, onHydrateTask }) {
+export default function Chat({ messages, briefUi, onHydrateTask, conversationId }) {
   return (
     <>
       {messages.map((m) => {
@@ -124,6 +125,13 @@ export default function Chat({ messages, briefUi, onHydrateTask }) {
             <div className="divider" key={m.id}>
               {m.text}
             </div>
+          )
+        }
+        if (m.kind === 'request') {
+          return (
+            <Row role="bot" cls="summary" key={m.id}>
+              <RequestCard m={m} conversationId={conversationId} />
+            </Row>
           )
         }
         if (m.kind === 'stage') return <StageLog m={m} key={m.id} />

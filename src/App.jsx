@@ -10,8 +10,9 @@ import {
 } from './client.js'
 import { fetchTaskDetail } from './taskDetail.js'
 import { registerIds, track } from './analytics.js'
-import { loadSessions, saveSessions } from './persist.js'
-import { nextId } from './lib.js'
+import { loadNotifyEmail, loadSessions, saveNotifyEmail, saveSessions } from './persist.js'
+import { isValidEmail, nextId } from './lib.js'
+import { startBuildTour, startIntroTour, tourRequested } from './tour.js'
 import {
   PIPELINE_STAGES,
   PREP_STAGES,
@@ -77,6 +78,9 @@ export default function App() {
   const [scenarioStage, setScenarioStage] = useState(emptyScenarioStage())
   const [buildStage, setBuildStage] = useState({ stages: [], status: 'running', result: null, error: '' })
   const [pickedScenario, setPickedScenario] = useState('')
+  // Where to mail the finished task. Optional — an empty value builds silently.
+  // Seeded from localStorage so a returning recruiter doesn't retype it.
+  const [notifyEmail, setNotifyEmail] = useState(() => loadNotifyEmail())
 
   // ---- refs (read inside async fetch / SSE callbacks) ----------------------
   const sessionIdRef = useRef(null)
@@ -147,6 +151,13 @@ export default function App() {
     })
   }, [messages, sessionId, viewingId])
 
+  // Phase 2 of the tour: the brief and build button do not exist on first load,
+  // so they get their own pass the first time a brief appears.
+  useEffect(() => {
+    if (!messages.some((m) => m.kind === 'brief')) return
+    startBuildTour({ force: tourRequested() })
+  }, [messages])
+
   // Keep the chat scrolled to the newest message. `main` is the scroll
   // container (overflow-y:auto) — not `.chat`, which is a flex:1 child — so
   // scroll the parent, else new replies never scroll into view.
@@ -207,6 +218,27 @@ export default function App() {
     try {
       const { data } = await createTaskBuilderMessage(sessionIdRef.current, { message: text })
       patchMessage(thinkingId, { text: data.reply, pending: false })
+      // The bot hit a dead-end it cannot build and offered to forward a
+      // request. Render the form inline, under the reply that offered it —
+      // `kind` is the message-renderer discriminator, so the request's own
+      // kind rides along as `kind_`.
+      //
+      // Dedup: the model re-emits the SAME request on consecutive turns while
+      // the topic is still live ("Elixir?" then "Right, elixir." both return
+      // {stack, Elixir}), which otherwise stacks up duplicate forms — and one
+      // reappears blank after you have already sent it. Keyed on kind+subject
+      // rather than on a "have we asked" flag, so a genuinely different
+      // request later in the same chat still gets its own card.
+      if (data.request && data.request.kind) {
+        const subject = data.request.subject || ''
+        setMessages((prev) =>
+          prev.some(
+            (m) => m.kind === 'request' && m.kind_ === data.request.kind && m.subject === subject,
+          )
+            ? prev
+            : [...prev, { id: nextId(), kind: 'request', kind_: data.request.kind, subject }],
+        )
+      }
       updateBrief(data)
     } catch {
       patchMessage(thinkingId, { text: 'Network error — please try again.', pending: false })
@@ -335,6 +367,12 @@ export default function App() {
     const instr = composeInstructions()
     instructionsRef.current = instr
     selectedScenarioRef.current = pickedScenario
+    // Optional completion notification. The wizard already blocks Build on a
+    // malformed address, so this only guards against a value that slipped
+    // through — an invalid one would 400 the whole run, and losing the
+    // notification is a far better failure than losing the build.
+    const email = isValidEmail(notifyEmail) ? notifyEmail.trim() : ''
+    saveNotifyEmail(email)
     generatingRef.current = true
     setGenerating(true)
     setWizardStep('building')
@@ -353,6 +391,7 @@ export default function App() {
       instructions: instr,
       selected_scenario: selectedScenarioRef.current,
       scenarios_prepared: scenariosPreparedRef.current,
+      notify_email: email,
     })
       .then(({ data }) => pollBuild(data.job_id))
       .catch(() => {
@@ -549,14 +588,21 @@ export default function App() {
     initRef.current = true
     setShowStarters(true)
     startSession()
+    // The tour waits for the greeting to land on its own (see whenReady) —
+    // a timer here would measure the page before the async greeting shifts it.
+    // ?tour=1 replays it for demos without clearing localStorage.
+    startIntroTour({ force: tourRequested() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const genHint = generating
     ? 'Generation in progress — logs stream in the chat.'
     : isBriefComplete(panelState.brief)
-      ? 'Click Generate — add optional instructions, pick a scenario, then build.'
-      : 'Answer the questions in the chat — the brief fills in here as you go.'
+      // Name the button. In review someone with a complete brief asked "Generate
+      // Task or Send?", pressed Send, and nothing happened — the CTA has to say
+      // which control finishes the job.
+      ? 'Everything look good? Click Generate task → to build it.'
+      : 'Just answer in the chat — the brief fills in here as you go.'
   const genDisabled = !(isBriefComplete(panelState.brief) && sessionId && !generating)
 
   const briefUi = {
@@ -609,21 +655,28 @@ export default function App() {
           )}
 
           <div className="chat">
-            <Chat messages={messages} briefUi={briefUi} onHydrateTask={hydrateTask} />
-          </div>
+            <Chat messages={messages} briefUi={briefUi} onHydrateTask={hydrateTask}
+                  conversationId={sessionId} />
 
-          {showStarters && !wizardOpen && !viewingId && (
-            <div className="starters">
-              <div className="starters-label">Try one of these to get going:</div>
-              <div className="starters-row">
-                {STARTERS.map((t, i) => (
-                  <button key={i} type="button" className="chip" onClick={() => sendText(t)}>
-                    {t}
-                  </button>
-                ))}
+            {/* Inside .chat, directly under the greeting, rather than after it.
+                .chat is flex:1, so a sibling here got pushed to the bottom of the
+                viewport — the examples sat ~600px below the question they answer,
+                which reads as unrelated page furniture instead of "pick one of
+                these". They are answers to the greeting, so they belong with it. */}
+            {showStarters && !wizardOpen && !viewingId && (
+              <div className="starters">
+                <div className="starters-label">Example answers — tap one to start:</div>
+                <div className="starters-row">
+                  {STARTERS.map((t, i) => (
+                    <button key={i} type="button" className="chip" onClick={() => sendText(t)}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <div className="starters-or">or type your own below</div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* The wizard renders BELOW the conversation so it appears down the
               page (where the user clicked Generate), not at the top. */}
@@ -642,6 +695,8 @@ export default function App() {
             scenarioStage={scenarioStage}
             pickedScenario={pickedScenario}
             onPickScenario={setPickedScenario}
+            notifyEmail={notifyEmail}
+            onNotifyEmailChange={setNotifyEmail}
             onBuildTask={onBuildTask}
             buildStage={buildStage}
             onBuildDone={finishBuild}

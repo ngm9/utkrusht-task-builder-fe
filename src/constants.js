@@ -4,12 +4,23 @@ export const GREETING =
 
 // Mirrors task_builder/slots.py: five required slots. scenario_count is
 // handled automatically by the pipeline, so it's not shown in the brief panel.
+// `question` is what the brief shows for the slot currently being asked, instead
+// of a status label like "being asked now". Someone scanning the card should see
+// the question they need to answer, phrased the way a person would ask it.
+//
+// `domain` keeps its key (the backend slot is `domain`) but reads as "Industry":
+// it is the word a recruiter recognises without translating.
 export const SLOT_DEFS = [
-  { key: 'competencies', label: 'Tech stack', list: true, required: true },
-  { key: 'proficiency', label: 'Proficiency', required: true },
-  { key: 'role', label: 'Role', required: true },
-  { key: 'focus_areas', label: 'Focus areas', list: true, required: true },
-  { key: 'domain', label: 'Domain', required: true },
+  { key: 'competencies', label: 'Tech stack', list: true, required: true,
+    question: 'Which tech stack should the candidate work in?' },
+  { key: 'proficiency', label: 'Proficiency', required: true,
+    question: 'What level — basic, intermediate or advanced?' },
+  { key: 'role', label: 'Role', required: true,
+    question: 'What role are you hiring for?' },
+  { key: 'focus_areas', label: 'Focus areas', list: true, required: true,
+    question: 'What focus areas would you like to assess?' },
+  { key: 'domain', label: 'Industry', required: true,
+    question: 'Which industry should the scenario be set in?' },
 ]
 
 export const PIPELINE_STAGES = [
@@ -92,8 +103,24 @@ export const POPULAR_STACKS = [
   'React + GraphQL',
 ]
 
+// Written in the first person on purpose: "I want a…" signals that this is a
+// conversation, not a form to fill in. They double as example ANSWERS to the
+// greeting's question, so they also show the three proficiency levels.
+//
+// The STACK NAMES here must match the competency catalogue exactly, and must not
+// name external infra. Two of the previous three were quietly broken:
+//
+//   "React"        -> the catalogue calls it ReactJs, so React matched nothing
+//                     and was dropped in silence; the chip promised React and
+//                     built a TypeScript-only task.
+//   "Java + Kafka" -> Kafka is an external service, so the bot's own infra
+//                     guardrail fired and it backpedalled ("Kafka requires an
+//                     infra template…") on the very first click.
+//
+// Verified against the live catalogue and by replaying each line through the
+// chat. If you edit these, replay them — a wrong stack name fails silently.
 export const STARTERS = [
-  'An INTERMEDIATE React + TypeScript task for a frontend engineer, focused on state management, e-commerce domain',
-  'A BASIC Java + Kafka task for a backend engineer, focused on consumer groups, logistics domain',
-  'An ADVANCED Python task for a data engineer, focused on pipeline reliability, fintech domain',
+  'I want an intermediate ReactJs + TypeScript task for a frontend engineer, focused on state management, in e-commerce',
+  'I want a basic Java task for a backend engineer, focused on error handling, in logistics',
+  'I want an advanced Python task for a data engineer, focused on data validation, in fintech',
 ]

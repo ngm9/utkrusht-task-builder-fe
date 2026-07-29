@@ -23,7 +23,7 @@ export default function BriefCard({ m, ui }) {
     if (filled && def.required) filledRequired += 1
     const display = filled
       ? value
-      : def.fallback || (def.key === asking ? 'being asked now…' : 'not set yet')
+      : def.fallback || (def.key === asking ? def.question || 'being asked now…' : 'not set yet')
     const clickable = filled && !generating
     return { def, filled, display, asking: def.key === asking, clickable }
   })
