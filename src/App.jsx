@@ -27,6 +27,7 @@ import {
 } from './constants.js'
 import Header from './components/Header.jsx'
 import Chat from './components/Chat.jsx'
+import BriefCard from './components/BriefCard.jsx'
 import GenerateWizard from './components/GenerateWizard.jsx'
 import HistoryPanel from './components/HistoryPanel.jsx'
 import SkillsPanel from './components/SkillsPanel.jsx'
@@ -95,6 +96,12 @@ export default function App() {
   // The most recent built task, if any. Drives the Share button, which must not
   // offer to share before there is something to share.
   const builtTask = [...messages].reverse().find((m) => m.kind === 'done')
+  // Show the pinned brief once the chat has learned anything at all — an empty
+  // five-slot card before the first answer is noise, not orientation.
+  const hasBrief = SLOT_DEFS.some((d) => {
+    const v = panelState.brief?.[d.key]
+    return d.list ? Array.isArray(v) && v.length > 0 : v != null && String(v).trim() !== ''
+  })
 
   async function onShare() {
     const url = builtTask?.task_url || ''
@@ -237,10 +244,11 @@ export default function App() {
     }
     panelStateRef.current = ns
     setPanelState(ns)
-    setMessages((prev) => [
-      ...prev.filter((m) => m.kind !== 'brief'),
-      { id: nextId(), kind: 'brief', ...ns },
-    ])
+    // The brief is NOT a chat message any more. It used to be appended to the
+    // stream and re-appended on every turn so it floated to the bottom, which
+    // meant you had to scroll to find the thing you were being asked to confirm.
+    // It now renders pinned above the conversation — see the brief-pinned block
+    // in the markup. panelState is the single source of truth for it.
   }
 
   // ---- conversation --------------------------------------------------------
@@ -706,6 +714,17 @@ export default function App() {
               <button type="button" className="link-btn" onClick={backToLive}>
                 ← Back to current
               </button>
+            </div>
+          )}
+
+          {/* Zubin's ask: the brief above, the chat below, "put together" — so
+              when you read "does everything look good" the reply box is right
+              there. Sticky, so it stays visible as the conversation grows. */}
+          {hasBrief && !viewingId && (
+            <div className="brief-pinned">
+              <div className="summary brief-card">
+                <BriefCard m={panelState} ui={briefUi} />
+              </div>
             </div>
           )}
 

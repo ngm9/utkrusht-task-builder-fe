@@ -740,3 +740,30 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   border:1px solid var(--border) !important;
 }
 .driver-popover.uk-tour .driver-popover-close-btn { color:var(--faint); }
+
+
+/* ---- pinned task brief (above the conversation) ------------------------
+   The brief used to sit in the chat stream, re-appended each turn so it drifted
+   to the bottom — you had to scroll to find the thing you were being asked to
+   confirm. Pinned here instead, sticky so it stays put as the chat grows.
+   `top:0` works because `main` is the scroll container. */
+.brief-pinned {
+  position: sticky; top: 0; z-index: 5;
+  width: 100%; max-width: 680px;
+  padding: 0 0 12px;
+  /* Fade the chat out behind it rather than letting messages slide under a
+     hard edge. */
+  background: linear-gradient(var(--bg) 0%, var(--bg) 82%, transparent 100%);
+}
+.brief-pinned .brief-card {
+  background: var(--card); border: 0.5px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--card-shadow);
+  padding: 12px 14px; white-space: normal;
+}
+/* Detached from the avatar column now, so it spans the full chat width. */
+.brief-pinned .brief-card { max-width: none; }
+
+@media print {
+  /* Keep it: it is task content, and it is the summary a reader wants. */
+  .brief-pinned { position: static; background: none; display: block !important; }
+}

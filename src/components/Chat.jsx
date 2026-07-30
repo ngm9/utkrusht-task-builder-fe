@@ -136,6 +136,9 @@ export default function Chat({ messages, briefUi, onHydrateTask, conversationId 
         }
         if (m.kind === 'stage') return <StageLog m={m} key={m.id} />
         if (m.kind === 'done') return <DoneCard m={m} onHydrateTask={onHydrateTask} key={m.id} />
+        // Live briefs are pinned above the chat now. This branch stays for
+        // sessions archived BEFORE that change, whose stored messages still
+        // contain a brief card — dropping it would blank part of their history.
         if (m.kind === 'brief') {
           return (
             <Row role="bot" cls="summary brief-card" key={m.id}>
