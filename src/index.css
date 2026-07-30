@@ -506,10 +506,17 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .print-head { display:none; }
 
 /* Print-to-PDF stylesheet. Triggered by the Download PDF button via
-   window.print(). Hides chrome, lets content flow across pages, and forces
-   every stage-log panel fully open so the logs print. */
+   window.print().
+   Prints THE TASK, not the conversation. It used to emit the whole chat —
+   every message, every stage log — which is of no use to whoever receives the
+   PDF: they want the task. So the chat stream, the wizard and the request forms
+   are all hidden, and only the task card and brief summary print. */
 @media print {
-  header, .dock, .starters, .modal-overlay, .side, .viewing-banner { display:none !important; }
+  header, .dock, .starters, .modal-overlay, .side, .viewing-banner,
+  .wizard-inline, .request-card, .stage-log, .starters-or { display:none !important; }
+  /* Conversation bubbles: hidden. The one exception is a summary/brief card,
+     which is task content rather than chat. */
+  .row:not(:has(.summary)) { display:none !important; }
   body { overflow:visible; height:auto; background:#fff; }
   .layout { display:block; width:100%; }
   main { overflow:visible; padding:0; display:block; }
@@ -519,11 +526,20 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
     border-bottom:1px solid var(--border); margin-bottom:14px;
     color:var(--uk-green-deep);
   }
-  .row, .summary, .stage-log { page-break-inside:avoid; }
+  .summary, .task-detail-card { page-break-inside:avoid; }
   .bubble { max-width:100% !important; }
-  .stage-log details > *:not(summary) { display:block !important; }
-  .stage-log pre.log { max-height:none !important; }
 }
+
+/* ---- LLM-suggested instructions (generate wizard) ---------------------- */
+.wz-suggestions { display:flex; flex-direction:column; gap:6px; }
+/* Full sentences, not chips — these are whole task descriptions, so they need
+   to wrap and read as prose rather than sit on one line like the infra toggles. */
+.wz-suggestion {
+  text-align:left; background:var(--card); border:0.5px solid var(--border);
+  border-radius:10px; padding:9px 12px; font:inherit; font-size:13px;
+  line-height:1.5; color:var(--muted); cursor:pointer;
+}
+.wz-suggestion:hover { border-color:var(--uk-green); background:var(--green-tint); }
 
 /* ---- generate wizard (centered human-in-the-loop) ---------------------- */
 .modal.wizard { max-width:660px; width:calc(100% - 32px); border:1px solid #c5ded1; }
