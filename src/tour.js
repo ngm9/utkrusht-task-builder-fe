@@ -164,7 +164,19 @@ export function startIntroTour({ force = false } = {}) {
  */
 export function startBuildTour({ force = false } = {}) {
   if (!force && localStorage.getItem(KEYS.build)) return
-  whenReady('.brief-card .cta', () => run(BUILD_STEPS, KEYS.build, { force }))
+  // The intro must be finished first. Phase 2 triggers when a brief appears,
+  // which on a first visit happens WHILE the intro is still on screen — that
+  // rendered two driver instances at once, stacked popovers and duplicate
+  // overlays. Two guards, because either alone is insufficient:
+  //   * the intro key proves phase 1 was seen at all
+  //   * a live .driver-popover proves it is still open right now (which the key
+  //     cannot tell us, and which is exactly the case with ?tour=1 replays)
+  const introDone = !!localStorage.getItem(KEYS.intro)
+  if (!introDone) return
+  whenReady('.brief-card .cta', () => {
+    if (document.querySelector('.driver-popover')) return
+    run(BUILD_STEPS, KEYS.build, { force })
+  })
 }
 
 /** True when the URL asks for a replay (`?tour=1`). */

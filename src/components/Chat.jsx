@@ -136,14 +136,15 @@ export default function Chat({ messages, briefUi, onHydrateTask, conversationId 
         }
         if (m.kind === 'stage') return <StageLog m={m} key={m.id} />
         if (m.kind === 'done') return <DoneCard m={m} onHydrateTask={onHydrateTask} key={m.id} />
-        // Live briefs are pinned above the chat now. This branch stays for
-        // sessions archived BEFORE that change, whose stored messages still
-        // contain a brief card — dropping it would blank part of their history.
         if (m.kind === 'brief') {
+          // Full width and no avatar: this is a panel showing the state of the
+          // brief, not the bot speaking, so it should not read as a message.
           return (
-            <Row role="bot" cls="summary brief-card" key={m.id}>
-              <BriefCard m={m} ui={briefUi} />
-            </Row>
+            <div className="row bot brief-card-row" key={m.id}>
+              <div className="bubble summary brief-card">
+                <BriefCard m={m} ui={briefUi} />
+              </div>
+            </div>
           )
         }
         // bubble — animated dots while pending; bot replies render markdown,

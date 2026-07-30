@@ -27,7 +27,6 @@ import {
 } from './constants.js'
 import Header from './components/Header.jsx'
 import Chat from './components/Chat.jsx'
-import BriefCard from './components/BriefCard.jsx'
 import GenerateWizard from './components/GenerateWizard.jsx'
 import HistoryPanel from './components/HistoryPanel.jsx'
 import SkillsPanel from './components/SkillsPanel.jsx'
@@ -96,12 +95,6 @@ export default function App() {
   // The most recent built task, if any. Drives the Share button, which must not
   // offer to share before there is something to share.
   const builtTask = [...messages].reverse().find((m) => m.kind === 'done')
-  // Show the pinned brief once the chat has learned anything at all — an empty
-  // five-slot card before the first answer is noise, not orientation.
-  const hasBrief = SLOT_DEFS.some((d) => {
-    const v = panelState.brief?.[d.key]
-    return d.list ? Array.isArray(v) && v.length > 0 : v != null && String(v).trim() !== ''
-  })
 
   async function onShare() {
     const url = builtTask?.task_url || ''
@@ -236,7 +229,7 @@ export default function App() {
   }, [wizardOpen])
 
   // ---- brief panel ---------------------------------------------------------
-  function updateBrief(data) {
+  function updateBrief(data, { beforeId } = {}) {
     const ns = {
       brief: data.brief || {},
       missing: data.missing_slots || [],
@@ -244,11 +237,18 @@ export default function App() {
     }
     panelStateRef.current = ns
     setPanelState(ns)
-    // The brief is NOT a chat message any more. It used to be appended to the
-    // stream and re-appended on every turn so it floated to the bottom, which
-    // meant you had to scroll to find the thing you were being asked to confirm.
-    // It now renders pinned above the conversation — see the brief-pinned block
-    // in the markup. panelState is the single source of truth for it.
+    setMessages((prev) => {
+      // One card, moved rather than duplicated.
+      const without = prev.filter((m) => m.kind !== 'brief')
+      const card = { id: nextId(), kind: 'brief', ...ns }
+      // Sit it between the user's message and the reply to it. Appending to the
+      // end instead put it below the reply, where it read as a footer to the
+      // whole conversation rather than the state of the turn you just took.
+      const at = beforeId ? without.findIndex((m) => m.id === beforeId) : -1
+      return at === -1
+        ? [...without, card]
+        : [...without.slice(0, at), card, ...without.slice(at)]
+    })
   }
 
   // ---- conversation --------------------------------------------------------
@@ -299,7 +299,7 @@ export default function App() {
             : [...prev, { id: nextId(), kind: 'request', kind_: data.request.kind, subject }],
         )
       }
-      updateBrief(data)
+      updateBrief(data, { beforeId: thinkingId })
     } catch {
       patchMessage(thinkingId, { text: 'Network error — please try again.', pending: false })
     } finally {
@@ -714,17 +714,6 @@ export default function App() {
               <button type="button" className="link-btn" onClick={backToLive}>
                 ← Back to current
               </button>
-            </div>
-          )}
-
-          {/* Zubin's ask: the brief above, the chat below, "put together" — so
-              when you read "does everything look good" the reply box is right
-              there. Sticky, so it stays visible as the conversation grows. */}
-          {hasBrief && !viewingId && (
-            <div className="brief-pinned">
-              <div className="summary brief-card">
-                <BriefCard m={panelState} ui={briefUi} />
-              </div>
             </div>
           )}
 
