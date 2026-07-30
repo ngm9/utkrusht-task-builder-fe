@@ -25,18 +25,42 @@ const THEME_KEY = 'taskbuilder.trace.theme'
 const asList = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v] : [])
 const runLabel = (r) => asList(r.competencies).join(', ') || String(r.run_id).slice(0, 12)
 
-/** Stages come from stages.jsonl when present, else from which logs exist —
- *  the two archive paths write different things and both should render. */
+/** The log files name the stages; stages.jsonl only says how they ended.
+ *
+ *  Two details this has to respect, both learned the hard way:
+ *   - `canon` MUST equal `row.stage`, which parseLog sets from the log filename
+ *     stem ("03_prompt"). The jsonl records use the bare name ("prompt"), so
+ *     listing those verbatim gave a sidebar entry that filtered the log pane to
+ *     nothing, and listing BOTH showed one stage twice.
+ *   - A stage writes its jsonl record when it FINISHES, so the stage that
+ *     crashed the run has logs and no record — exactly the one you opened this
+ *     page to read. It must appear, and must not claim it succeeded. */
 function deriveStages(run) {
-  const fromJsonl = (run?.stages || []).map((s, i) => ({
-    canon: s.stage || s.label || `stage_${i}`,
-    label: s.label || s.stage || `stage ${i + 1}`,
-    ok: s.exit_code != null ? s.exit_code === 0 : s.status !== 'failed',
-    meta: s.duration_s != null ? `${s.duration_s}s` : '',
-  }))
-  if (fromJsonl.length) return fromJsonl
-  const names = [...new Set((run?.logs || []).map(stageOfLog))]
-  return names.map((n) => ({ canon: n, label: n, ok: true, meta: '' }))
+  const bare = (n) => String(n).replace(/^\d+_/, '')
+  const byBare = new Map()
+  ;(run?.stages || []).forEach((s, i) => byBare.set(bare(s.stage || s.label || `stage_${i}`), s))
+
+  const outcome = (s) => (s.exit_code != null ? s.exit_code === 0 : s.status !== 'failed')
+  const took = (s) =>
+    s.duration_s != null ? `${s.duration_s}s`
+      : s.duration_ms != null ? `${Math.round(s.duration_ms / 1000)}s`
+        : ''
+
+  // Numeric prefixes make a plain sort the pipeline order.
+  const stems = [...new Set((run?.logs || []).map(stageOfLog))].sort()
+  const seen = new Set()
+  const stages = stems.map((n) => {
+    const s = byBare.get(bare(n))
+    if (s) seen.add(bare(n))
+    return { canon: n, label: n, ok: s ? outcome(s) : null, meta: s ? took(s) : 'no outcome' }
+  })
+  // A recorded stage that archived no logs still belongs in the list.
+  for (const [k, s] of byBare) {
+    if (seen.has(k)) continue
+    const name = s.stage || s.label || k
+    stages.push({ canon: name, label: name, ok: outcome(s), meta: 'no logs' })
+  }
+  return stages
 }
 
 export default function TraceApp() {
