@@ -1,13 +1,16 @@
+// Header carries the two panel toggles and nothing else.
+//
+// New task / Share / Download PDF used to live here. They were always-visible
+// controls for things that mostly do not exist yet: on a fresh visit there is
+// no task to share and nothing worth printing, so two of the three were dead
+// weight or disabled most of the time. Share now appears on the generated task
+// card, where it has something to act on. "New task" is still one click away in
+// the history panel.
 export default function Header({
-  onNewTask,
-  onDownloadPdf,
   showHistory,
   onToggleHistory,
   showSkills,
   onToggleSkills,
-  onShare,
-  canShare,
-  shareLabel,
 }) {
   return (
     <header>
@@ -26,19 +29,6 @@ export default function Header({
         Task <span className="shimmer">Builder</span>
       </h1>
       <div className="header-actions">
-        <button className="hbtn" type="button" onClick={onNewTask}>
-          New task
-        </button>
-        {/* Disabled until a task exists — a Share button that shares nothing is
-            worse than no button. Copies the task's repo link for now; the
-            product decision on a recruiter-style invite link is still open. */}
-        <button className="hbtn" type="button" onClick={onShare} disabled={!canShare}
-                title={canShare ? 'Copy a link to this task' : 'Build a task first'}>
-          {shareLabel || 'Share'}
-        </button>
-        <button className="hbtn" type="button" onClick={onDownloadPdf}>
-          Download PDF
-        </button>
         <button
           className={showSkills ? 'panel-toggle on' : 'panel-toggle'}
           type="button"

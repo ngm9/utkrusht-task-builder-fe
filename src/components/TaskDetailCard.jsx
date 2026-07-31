@@ -29,17 +29,37 @@ function toPoints(text) {
     .filter(Boolean)
 }
 
-export default function TaskDetailCard({ task }) {
+/** The link worth sharing: the task's own repository, falling back to the
+ *  starter-code gist. Returns '' when neither exists, which is the signal not
+ *  to render the Share control at all. */
+export function shareableUrl(task) {
+  const res = (task && task.resources) || {}
+  return res.github_repo || res.github_gist || ''
+}
+
+export default function TaskDetailCard({ task, onShare, shareLabel }) {
   if (!task) return null
   const points = toPoints(task.problem_statement)
   const outcomes = task.outcomes || []
   const skills = task.skills || []
   const res = task.resources || {}
   const datasets = res.datasets || []
+  // Share lives here rather than in the header: it only means anything once a
+  // task exists, and this card IS the task. No link, no button — a Share
+  // control that shares nothing is worse than no control.
+  const canShare = !!onShare && !!shareableUrl(task)
   return (
     <div className="task-detail">
       <div className="task-detail-head">
-        <h3 className="task-detail-title">{task.title}</h3>
+        <div className="task-detail-titlerow">
+          <h3 className="task-detail-title">{task.title}</h3>
+          {canShare && (
+            <button type="button" className="task-share" onClick={onShare}
+                    title="Copy a link to this task">
+              {shareLabel || 'Share'}
+            </button>
+          )}
+        </div>
         <div className="task-detail-meta">
           {task.time_limit_mins ? (
             <span className="task-detail-time">
