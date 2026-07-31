@@ -19,48 +19,65 @@ import {
 } from '../../traceApi.js'
 import { getJwt, promptForJwt } from '../../auth.js'
 import { LEVELS, parseLog, rowMatches, stageHue, stageOfLog } from './logModel.js'
+import LlmCall from './LlmCall.jsx'
 import StageModal from './StageModal.jsx'
 
 const THEME_KEY = 'taskbuilder.trace.theme'
 const asList = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v] : [])
 const runLabel = (r) => asList(r.competencies).join(', ') || String(r.run_id).slice(0, 12)
 
-/** The log files name the stages; stages.jsonl only says how they ended.
+const bareStage = (n) => String(n).replace(/^\d+_/, '')
+const secs = (ms) => (ms == null ? '' : ms < 1000 ? `${ms}ms` : `${Math.round(ms / 1000)}s`)
+
+/** A pipeline run is routinely 10+ minutes, and "758s" is not a duration
+ *  anyone reads at a glance. */
+function fmtDuration(seconds) {
+  const s = Math.round(seconds)
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}
+
+/** The five pipeline stages — the worker's subprocesses, the only things that
+ *  write logs. `canon` MUST equal `row.stage`, which parseLog sets from the log
+ *  filename stem ("03_prompt"), or clicking a stage filters the pane to nothing.
  *
- *  Two details this has to respect, both learned the hard way:
- *   - `canon` MUST equal `row.stage`, which parseLog sets from the log filename
- *     stem ("03_prompt"). The jsonl records use the bare name ("prompt"), so
- *     listing those verbatim gave a sidebar entry that filtered the log pane to
- *     nothing, and listing BOTH showed one stage twice.
- *   - A stage writes its jsonl record when it FINISHES, so the stage that
- *     crashed the run has logs and no record — exactly the one you opened this
- *     page to read. It must appear, and must not claim it succeeded. */
-function deriveStages(run) {
-  const bare = (n) => String(n).replace(/^\d+_/, '')
-  const byBare = new Map()
-  ;(run?.stages || []).forEach((s, i) => byBare.set(bare(s.stage || s.label || `stage_${i}`), s))
-
-  const outcome = (s) => (s.exit_code != null ? s.exit_code === 0 : s.status !== 'failed')
-  const took = (s) =>
-    s.duration_s != null ? `${s.duration_s}s`
-      : s.duration_ms != null ? `${Math.round(s.duration_ms / 1000)}s`
-        : ''
-
+ *  Outcome comes from the stage's OWN `NN_stage.timing.json` (exit_code +
+ *  duration_s), not from stages.jsonl. timing.json is written per subprocess and
+ *  always present; stages.jsonl is the tracing sink's span log, which names
+ *  things differently and has no entry at all for stages that make no LLM calls
+ *  — that is why preflight and tasks used to read "no outcome" on a run that
+ *  plainly succeeded. */
+function deriveStages(run, timings, costs) {
   // Numeric prefixes make a plain sort the pipeline order.
   const stems = [...new Set((run?.logs || []).map(stageOfLog))].sort()
-  const seen = new Set()
-  const stages = stems.map((n) => {
-    const s = byBare.get(bare(n))
-    if (s) seen.add(bare(n))
-    return { canon: n, label: n, ok: s ? outcome(s) : null, meta: s ? took(s) : 'no outcome' }
+  return stems.map((n) => {
+    const t = timings?.[n]
+    return {
+      canon: n,
+      label: n,
+      ok: t && t.exit_code != null ? t.exit_code === 0 : null,
+      meta: t?.duration_s != null ? `${Math.round(t.duration_s)}s` : t ? '' : 'no outcome',
+      usd: costs?.[bareStage(n)]?.usd,
+    }
   })
-  // A recorded stage that archived no logs still belongs in the list.
-  for (const [k, s] of byBare) {
-    if (seen.has(k)) continue
-    const name = s.stage || s.label || k
-    stages.push({ canon: name, label: name, ok: outcome(s), meta: 'no logs' })
-  }
-  return stages
+}
+
+/** Instrumented spans that ran INSIDE a stage — classifier, task_gen, eval,
+ *  gate, quality, solution all execute within 04_tasks. They emit no logs of
+ *  their own by construction, so they are deliberately kept out of the stage
+ *  list (which is a log filter) and shown as a timing breakdown instead. Spans
+ *  whose name matches a real stage are dropped: that is the stage, not a span
+ *  within it. */
+function deriveSpans(run) {
+  const stems = new Set((run?.logs || []).map(stageOfLog).map(bareStage))
+  return (run?.stages || [])
+    .filter((s) => s.stage && !stems.has(bareStage(s.stage)))
+    .map((s) => ({
+      name: s.stage,
+      ms: s.duration_ms ?? null,
+      ok: s.status !== 'failed' && !s.error,
+      error: s.error || '',
+    }))
 }
 
 export default function TraceApp() {
@@ -71,9 +88,12 @@ export default function TraceApp() {
   const [run, setRun] = useState(null)
   const [rows, setRows] = useState([])
   const [llm, setLlm] = useState([])
+  const [timings, setTimings] = useState({})
+  const [spanFilter, setSpanFilter] = useState('')
   const [needsAuth, setNeedsAuth] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loadingRuns, setLoadingRuns] = useState(true)
   const [openStage, setOpenStage] = useState(null)
 
   // log pane controls
@@ -86,13 +106,19 @@ export default function TraceApp() {
 
   useEffect(() => { localStorage.setItem(THEME_KEY, theme) }, [theme])
 
+  // Listing walks every run prefix in S3 and reads each manifest, so it takes
+  // seconds — it MUST report itself as busy or the page looks empty and broken
+  // for the whole wait.
   const loadRuns = useCallback(async () => {
-    setErr(''); setNeedsAuth(false)
+    setErr(''); setNeedsAuth(false); setLoadingRuns(true)
     try {
       setRuns((await listTraces(100)).runs || [])
     } catch (e) {
       if (e instanceof TraceAuthError) setNeedsAuth(true)
       else setErr(String(e.message || e))
+      setRuns([])   // otherwise a failed load is indistinguishable from a slow one
+    } finally {
+      setLoadingRuns(false)
     }
   }, [])
 
@@ -102,7 +128,8 @@ export default function TraceApp() {
   // fetched in parallel — a run has a handful of small objects, and doing them
   // in sequence made selecting a run feel broken.
   const loadRun = useCallback(async (runId) => {
-    setBusy(true); setRun(null); setRows([]); setLlm([]); setStageFilter('')
+    setBusy(true); setRun(null); setRows([]); setLlm([]); setTimings({})
+    setStageFilter(''); setSpanFilter('')
     try {
       const d = await getTrace(runId)
       setRun(d)
@@ -111,11 +138,24 @@ export default function TraceApp() {
       // the backend links them via generation_jobs. log_run_id says which
       // folder actually holds the files.
       const logId = d.log_run_id || runId
-      const texts = await Promise.all(
+      // exit_code + duration per stage now arrive WITH the detail. They used to
+      // be one extra request each, which pushed a run load past the route's own
+      // rate limit — the two that 429'd were then indistinguishable from stages
+      // that never reported an outcome.
+      setTimings(d.timings || {})
+      const fetched = await Promise.all(
         (d.logs || []).filter((n) => !n.endsWith('.timing.json'))
-          .map((n) => getTraceLog(logId, n).then((r) => [n, r.text]).catch(() => [n, ''])),
+          .map((n) => getTraceLog(logId, n)
+            .then((r) => [n, r.text, null])
+            .catch((e) => [n, '', e])),
       )
-      setRows(texts.flatMap(([n, t]) => parseLog(n, t)))
+      setRows(fetched.flatMap(([n, t]) => parseLog(n, t)))
+      // Say which logs failed. Silently rendering a short log as if it were
+      // complete is the worst outcome on a page whose whole job is fidelity.
+      const failed = fetched.filter(([, , e]) => e).map(([n]) => n)
+      if (failed.length) {
+        setErr(`${failed.length} log file(s) failed to load: ${failed.join(', ')}`)
+      }
       getTraceLlm(runId).then((r) => setLlm(r.calls || [])).catch(() => {})
     } catch (e) {
       setErr(String(e.message || e))
@@ -133,7 +173,40 @@ export default function TraceApp() {
       `${runLabel(r)} ${r.run_id} ${r.task_name || ''} ${r.outcome || ''}`.toLowerCase().includes(q))
   }, [runs, runQuery])
 
-  const stages = useMemo(() => deriveStages(run), [run])
+  // Cost + wall time keyed by BARE stage name, so both the stage rows
+  // ("03_prompt") and the span pills ("task_gen") can look themselves up.
+  const costByStage = useMemo(() => {
+    const m = {}
+    for (const r of run?.cost?.by_stage || []) m[bareStage(r.stage)] = r
+    return m
+  }, [run])
+
+  // Total wall time is the SUBPROCESS timings, not the sum of span durations:
+  // spans nest inside stages, so adding those would double-count.
+  const totalSeconds = useMemo(
+    () => Object.values(timings).reduce((n, t) => n + (t?.duration_s || 0), 0),
+    [timings],
+  )
+
+  // The repo URL is not in the manifest — stage 04 prints it, and we already
+  // have every log line in memory, so read it from there rather than adding a
+  // lookup. Absent on a failed run, which is correct: no repo was created.
+  const repoUrl = useMemo(() => {
+    for (const r of rows) {
+      const m = /GitHub Repository:\s*(https:\/\/\S+)/.exec(r.text || '')
+      if (m) return m[1]
+    }
+    return ''
+  }, [rows])
+
+  const stages = useMemo(() => deriveStages(run, timings, costByStage), [run, timings, costByStage])
+  const spans = useMemo(() => deriveSpans(run), [run])
+  // The stage list keys on the log stem ("03_prompt"); llm_calls record the
+  // bare name ("prompt"). Selecting either narrows the feed to that unit.
+  const shownLlm = useMemo(() => {
+    const want = spanFilter || (stageFilter ? bareStage(stageFilter) : '')
+    return want ? llm.filter((c) => bareStage(c.stage || '') === want) : llm
+  }, [llm, spanFilter, stageFilter])
   const shownRows = useMemo(
     () => rows.filter((r) => rowMatches(r, { query, level, stage: stageFilter })),
     [rows, query, level, stageFilter],
@@ -188,7 +261,9 @@ export default function TraceApp() {
           ))}
         </select>
         <button type="button" className="tr-btn" onClick={() => { loadRuns(); if (sel) loadRun(sel) }}>↻</button>
-        <span className={`tr-conn ${busy ? '' : 'live'}`}>{busy ? 'loading' : 'idle'}</span>
+        <span className={`tr-conn ${busy || loadingRuns ? '' : 'live'}`}>
+          {loadingRuns ? 'loading runs' : busy ? 'loading run' : 'idle'}
+        </span>
         <div className="tr-totals">
           <span>calls <b>{totals.calls}</b></span>
           <span>tokens <b>{totals.tokens.toLocaleString()}</b></span>
@@ -204,9 +279,24 @@ export default function TraceApp() {
       <main className="tr-main">
         {/* LEFT — runs when nothing is selected, that run's stages once it is */}
         <div className="tr-pane">
-          <div className="tr-pane-head">{sel ? 'Stages' : `Runs (${visibleRuns.length})`}</div>
+          <div className="tr-pane-head">
+            {sel ? 'Stages' : loadingRuns ? 'Runs…' : `Runs (${visibleRuns.length})`}
+          </div>
           <div className="tr-pane-body">
-            {!sel && visibleRuns.map((r) => (
+            {/* Listing is a multi-second S3 walk. Skeleton rows rather than a
+                word, so the pane holds its shape and reads as filling in. */}
+            {!sel && loadingRuns && Array.from({ length: 7 }, (_, i) => (
+              <div className="tr-stage tr-skeleton" key={i} aria-hidden="true">
+                <span className="tr-dot" />
+                <span className="tr-skel-bar" style={{ width: `${70 - i * 6}%` }} />
+              </div>
+            ))}
+            {!sel && !loadingRuns && !visibleRuns.length && (
+              <div className="tr-empty">
+                {runQuery ? 'No runs match that search.' : 'No archived runs yet.'}
+              </div>
+            )}
+            {!sel && !loadingRuns && visibleRuns.map((r) => (
               <button key={r.run_id} type="button" className="tr-stage"
                       onClick={() => setSel(r.run_id)}>
                 <span className={`tr-dot ${r.outcome === 'created' ? 'ok' : r.outcome === 'error' ? 'err' : ''}`} />
@@ -227,7 +317,10 @@ export default function TraceApp() {
                           onDoubleClick={() => setOpenStage(s)}>
                     <span className={`tr-dot ${s.ok ? 'ok' : 'err'}`} />
                     <span className="tr-stage-name">{s.label}</span>
-                    <span className="tr-stage-meta">{s.meta}</span>
+                    <span className="tr-stage-meta">
+                      {s.meta}
+                      {s.usd != null && <span className="tr-usd"> ${s.usd.toFixed(2)}</span>}
+                    </span>
                   </button>
                 ))}
                 {!!stages.length && (
@@ -267,6 +360,7 @@ export default function TraceApp() {
                  }}>
               <div className={`tr-log ${compact ? 'compact' : ''}`}>
                 {!sel && <div className="tr-empty">Pick a run to see its logs.</div>}
+                {sel && busy && <div className="tr-empty tr-pulse">Fetching this run’s logs…</div>}
                 {sel && !rows.length && !busy && (
                   // Two archive paths write different things: the traced
                   // pipeline uploads llm_calls but no per-stage logs. Saying so
@@ -301,7 +395,11 @@ export default function TraceApp() {
         <div className="tr-pane tr-right">
           <div className="tr-pane-head">Result &amp; LLM Traces</div>
           <div className="tr-pane-body">
-            {!run && <div className="tr-empty">No run selected.</div>}
+            {/* `sel` is set before `run` arrives, so this must distinguish
+                "nothing picked" from "picked, still fetching" — otherwise the
+                pane claims no run is selected while one is loading. */}
+            {!run && !sel && <div className="tr-empty">No run selected.</div>}
+            {!run && sel && <div className="tr-empty tr-pulse">Loading run…</div>}
             {run && (
               <div className="tr-card">
                 <div className="tr-card-head">
@@ -314,9 +412,85 @@ export default function TraceApp() {
                   <dl className="tr-kv">
                     <dt>run</dt><dd>{run.run_id}</dd>
                     {run.manifest?.task_id && (<><dt>task</dt><dd>{run.manifest.task_id}</dd></>)}
+                    {run.manifest?.task_name && (
+                      <><dt>name</dt><dd>{run.manifest.task_name}</dd></>
+                    )}
                     <dt>stack</dt><dd>{asList(run.manifest?.competencies).join(', ') || '—'}</dd>
                     <dt>env</dt><dd>{run.manifest?.env || '—'}</dd>
+                    {/* Wall time across the five subprocesses. Spans nest inside
+                        them, so summing spans instead would double-count. */}
+                    {totalSeconds > 0 && (
+                      <><dt>time</dt><dd>{fmtDuration(totalSeconds)}</dd></>
+                    )}
+                    {run.cost && (
+                      <>
+                        <dt>cost</dt>
+                        <dd>
+                          ${run.cost.total_usd.toFixed(2)}
+                          <span className="tr-faint"> est.</span>
+                        </dd>
+                        <dt>tokens</dt>
+                        <dd>
+                          {run.cost.total_tokens.toLocaleString()}
+                          <span className="tr-faint">
+                            {' '}({run.cost.input_tokens.toLocaleString()} in
+                            {' / '}{run.cost.output_tokens.toLocaleString()} out)
+                          </span>
+                        </dd>
+                      </>
+                    )}
+                    {/* Only exists once stage 04 has actually created it, so
+                        its absence on a failed run is the truth, not a gap. */}
+                    {repoUrl && (
+                      <>
+                        <dt>repo</dt>
+                        <dd>
+                          <a href={repoUrl} target="_blank" rel="noopener noreferrer">
+                            {repoUrl.replace('https://github.com/', '')}
+                          </a>
+                        </dd>
+                      </>
+                    )}
                   </dl>
+                </div>
+              </div>
+            )}
+            {/* Spans that ran inside a stage. They write no logs of their own,
+                so they belong here — as a time breakdown of where a stage
+                actually went — rather than in the stage list, where they would
+                look like log-bearing stages that lost their logs. */}
+            {spans.length > 0 && (
+              <div className="tr-card">
+                <div className="tr-card-head">
+                  <span>Spans inside stages</span>
+                  {spanFilter && (
+                    <button type="button" className="tr-btn" onClick={() => setSpanFilter('')}>
+                      clear
+                    </button>
+                  )}
+                </div>
+                <div className="tr-card-body">
+                  <div className="tr-spans">
+                    {spans.map((s) => (
+                      <button type="button" key={s.name}
+                              className={`tr-span ${spanFilter === s.name ? 'on' : ''} ${s.ok ? '' : 'err'}`}
+                              title={s.error || `${s.name} — filter the calls below`}
+                              onClick={() => setSpanFilter(spanFilter === s.name ? '' : s.name)}>
+                        <span className="tr-span-name"
+                              style={{ '--stage-color': stageHue(s.name) }}>{s.name}</span>
+                        <span className="tr-span-ms">
+                          {secs(s.ms)}
+                          {costByStage[s.name]?.usd
+                            ? ` · $${costByStage[s.name].usd.toFixed(2)}`
+                            : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="tr-faint-note">
+                    No logs of their own — these run inside a stage. Click one to
+                    filter the calls below.
+                  </div>
                 </div>
               </div>
             )}
@@ -326,21 +500,12 @@ export default function TraceApp() {
                 (PIPELINE_TRACING_ENABLED). Stage logs are archived regardless.
               </div>
             )}
-            {llm.map((c, i) => (
-              <div key={i} className="tr-card">
-                <div className="tr-card-head">
-                  <span style={{ fontFamily: 'var(--mono)' }}>{c.model || '?'}</span>
-                  <span className="tr-badge-pill">{c.latency_ms != null ? `${c.latency_ms}ms` : ''}</span>
-                </div>
-                <div className="tr-card-body">
-                  {c.call_type || ''}{c.attempt != null ? ` · attempt ${c.attempt}` : ''}
-                  <details>
-                    <summary style={{ cursor: 'pointer', marginTop: 4 }}>payload</summary>
-                    <pre className="tr-pre">{JSON.stringify(c, null, 2)}</pre>
-                  </details>
-                </div>
+            {run && llm.length > 0 && shownLlm.length === 0 && (
+              <div className="tr-empty">
+                No calls recorded for that selection — {llm.length} in this run.
               </div>
-            ))}
+            )}
+            {shownLlm.map((c, i) => <LlmCall call={c} key={c.trace_id || i} />)}
           </div>
         </div>
       </main>

@@ -24,8 +24,13 @@ export function classifyLine(text) {
 /** Stable colour per stage name — trace_ui generated hues rather than hand-
  *  picking, so a new stage never lands without a colour. */
 export function stageHue(stage) {
+  // Hash the name WITHOUT its numeric prefix: logs name the stage "03_prompt"
+  // but llm_calls records it as "prompt", and hashing them separately gave the
+  // same stage two different colours across the panes. Slight drift from
+  // trace_ui's exact hues, in exchange for the colour meaning one thing.
+  const key = String(stage).replace(/^\d+_/, '')
   let h = 0
-  for (let i = 0; i < stage.length; i += 1) h = (h * 31 + stage.charCodeAt(i)) % 360
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) % 360
   return `hsl(${h} var(--stage-sat) var(--stage-l))`
 }
 

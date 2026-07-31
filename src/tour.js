@@ -33,9 +33,18 @@ const INTRO_STEPS = [
     // that opens by pointing at a sidebar assumes the visitor already knows what
     // the product is. They don't; that is the first thing to answer.
     popover: {
-      title: 'This builds coding assessments for you',
+      // Centred by CSS, not by driver: driver computes left from
+      // `innerWidth/2 - measuredWidth/2`, and the measurement is taken against
+      // its own default max-width before our wider one is in play, so the
+      // modal lands off-centre. A transform-based centre cannot drift.
+      popoverClass: 'uk-tour uk-tour-center',
+      title: 'Welcome to Task Builder',
       description:
-        'Tell us who you are hiring and we generate a real task — a problem statement plus a starter repo your candidates can clone and run. No forms: it is one conversation, and we fill in the details as you go.',
+        '<p>Task Builder allows you to build production environments for your '
+        + 'candidates to solve real problems in.</p>'
+        + '<p>A problem consists of a github repo, sometimes infrastructure '
+        + 'e.g. databases, APIs etc.</p>'
+        + '<p>Just chat your way through it.</p>',
     },
   },
   {
@@ -164,7 +173,19 @@ export function startIntroTour({ force = false } = {}) {
  */
 export function startBuildTour({ force = false } = {}) {
   if (!force && localStorage.getItem(KEYS.build)) return
-  whenReady('.brief-card .cta', () => run(BUILD_STEPS, KEYS.build, { force }))
+  // The intro must be finished first. Phase 2 triggers when a brief appears,
+  // which on a first visit happens WHILE the intro is still on screen — that
+  // rendered two driver instances at once, stacked popovers and duplicate
+  // overlays. Two guards, because either alone is insufficient:
+  //   * the intro key proves phase 1 was seen at all
+  //   * a live .driver-popover proves it is still open right now (which the key
+  //     cannot tell us, and which is exactly the case with ?tour=1 replays)
+  const introDone = !!localStorage.getItem(KEYS.intro)
+  if (!introDone) return
+  whenReady('.brief-card .cta', () => {
+    if (document.querySelector('.driver-popover')) return
+    run(BUILD_STEPS, KEYS.build, { force })
+  })
 }
 
 /** True when the URL asks for a replay (`?tour=1`). */

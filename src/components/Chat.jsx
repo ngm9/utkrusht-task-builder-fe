@@ -56,7 +56,7 @@ function StageLog({ m }) {
   )
 }
 
-function DoneCard({ m, onHydrateTask }) {
+function DoneCard({ m, onHydrateTask, onShare, shareLabel }) {
   // Older done-messages (recorded before the detail card existed, or saved
   // before the fetch resolved) carry only task_id — ask App to fetch the
   // detail and patch it in, upgrading this card in place.
@@ -73,7 +73,7 @@ function DoneCard({ m, onHydrateTask }) {
     return (
       <Row role="bot" cls="result-card">
         <h4>Task created</h4>
-        <TaskDetailCard task={m.task} />
+        <TaskDetailCard task={m.task} onShare={onShare} shareLabel={shareLabel} />
       </Row>
     )
   }
@@ -116,7 +116,8 @@ function Fragment({ label, value }) {
   )
 }
 
-export default function Chat({ messages, briefUi, onHydrateTask, conversationId }) {
+export default function Chat({ messages, briefUi, onHydrateTask, conversationId,
+                              onShare, shareLabel }) {
   return (
     <>
       {messages.map((m) => {
@@ -135,7 +136,10 @@ export default function Chat({ messages, briefUi, onHydrateTask, conversationId 
           )
         }
         if (m.kind === 'stage') return <StageLog m={m} key={m.id} />
-        if (m.kind === 'done') return <DoneCard m={m} onHydrateTask={onHydrateTask} key={m.id} />
+        if (m.kind === 'done') {
+          return <DoneCard m={m} onHydrateTask={onHydrateTask} key={m.id}
+                           onShare={() => onShare?.(m)} shareLabel={shareLabel} />
+        }
         if (m.kind === 'brief') {
           return (
             <Row role="bot" cls="summary brief-card" key={m.id}>

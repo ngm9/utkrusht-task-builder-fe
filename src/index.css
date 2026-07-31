@@ -390,8 +390,19 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .task-detail { display:flex; flex-direction:column; gap:14px; text-align:left;
   padding:4px 0 8px; }
 .task-detail-head { display:flex; flex-direction:column; gap:8px; }
+/* Title and Share on one line, Share pinned right. `min-width:0` on the title
+   so a long title ellipsises instead of shoving the button off the card. */
+.task-detail-titlerow { display:flex; align-items:flex-start; gap:12px; }
 .task-detail-title { margin:0; font-size:17px; font-weight:700; line-height:1.4;
-  color:var(--text); }
+  color:var(--text); flex:1; min-width:0; }
+.task-share {
+  flex:none; font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+  background:var(--card); color:var(--uk-green-deep);
+  border:1px solid var(--uk-green); border-radius:8px; padding:5px 14px;
+}
+.task-share:hover { background:var(--green-tint); }
+/* A printed task should not carry a control nobody can press. */
+@media print { .task-share { display:none; } }
 .task-detail-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px;
   font-size:13px; color:var(--text); }
 .task-detail-time b { font-weight:600; }
@@ -693,6 +704,10 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   cursor:pointer;
 }
 .request-card__send:hover:not(:disabled) { background:var(--uk-green-deep); }
+/* Reassurance under the button, where the hesitation actually happens. */
+.request-card__privacy {
+  margin:2px 0 0; font-size:12px; line-height:1.5; color:var(--faint);
+}
 /* Disabled until both fields are filled — a note with no address is
    unactionable, an address with no note says nothing. */
 .request-card__send:disabled { background:var(--faint); cursor:not-allowed; }
@@ -708,14 +723,40 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   background:var(--card); color:var(--text);
   border:0.5px solid var(--border); border-radius:var(--radius);
   box-shadow:0 8px 30px rgba(28,25,23,.13);
-  font-family:inherit; max-width:330px; padding:16px 18px;
+  font-family:inherit; max-width:380px; padding:18px 20px;
+  /* Root fix for the alignment: `all:unset` above means inheritable properties
+     come from <body>, so anything the page sets leaks in here. Pin them once
+     and every child starts from the same left edge. */
+  text-align:left; text-indent:0; letter-spacing:normal; word-spacing:normal;
 }
+/* The welcome step has no target element, so it is a modal and should sit dead
+   centre. driver positions it with inline styles from a measured width, which
+   is why it drifted; override those and centre with a transform, which needs
+   no measurement at all. !important is required — driver writes left/top
+   inline on every reposition (resize, scroll). */
+.driver-popover.uk-tour-center {
+  left:50% !important; top:50% !important;
+  right:auto !important; bottom:auto !important;
+  transform:translate(-50%, -50%);
+}
+/* The close button is absolutely positioned over the top-right corner with
+   nothing reserving space for it, so the title needs the gutter or a two-line
+   title runs underneath the ×. */
 .driver-popover.uk-tour .driver-popover-title {
-  font-size:15px; font-weight:600; color:var(--uk-green-deep);
+  font-size:16px; font-weight:600; color:var(--uk-green-deep);
+  line-height:1.4; display:block; margin:0 28px 0 0; padding:0;
+}
+.driver-popover.uk-tour .driver-popover-close-btn {
+  top:12px; right:12px; color:var(--faint);
 }
 .driver-popover.uk-tour .driver-popover-description {
-  font-size:13.5px; line-height:1.6; color:var(--muted); margin-top:4px;
+  font-size:13.5px; line-height:1.6; color:var(--muted);
+  margin:10px 0 0; padding:0;
 }
+/* The intro step is several paragraphs. Browser default <p> margins collapse
+   oddly inside the popover, so space them explicitly and kill the outer ones. */
+.driver-popover.uk-tour .driver-popover-description p { margin:0 0 10px; }
+.driver-popover.uk-tour .driver-popover-description p:last-child { margin-bottom:0; }
 .driver-popover.uk-tour .driver-popover-progress-text {
   font-size:12px; color:var(--faint);
 }

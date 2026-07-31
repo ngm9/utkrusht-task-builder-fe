@@ -81,6 +81,13 @@ export default function RequestCard({ m, conversationId }) {
       <button className="request-card__send" type="submit" disabled={disabled}>
         {state === 'sending' ? 'Sending…' : 'Send to the team'}
       </button>
+      {/* Under the button, not next to the email field: the hesitation about
+          handing over an address lands at the moment of submitting, not while
+          typing it. */}
+      <p className="request-card__privacy">
+        We will not share your email with anyone. We might only use it to reach
+        out to you.
+      </p>
       {state === 'error' && (
         <p className="request-card__error">
           That didn&rsquo;t go through. Try again?

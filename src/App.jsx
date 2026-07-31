@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import {
   createTaskBuilderSession,
   createTaskBuilderMessage,
@@ -28,6 +27,7 @@ import {
 import Header from './components/Header.jsx'
 import Chat from './components/Chat.jsx'
 import GenerateWizard from './components/GenerateWizard.jsx'
+import { shareableUrl } from './components/TaskDetailCard.jsx'
 import HistoryPanel from './components/HistoryPanel.jsx'
 import SkillsPanel from './components/SkillsPanel.jsx'
 
@@ -92,15 +92,14 @@ export default function App() {
   const [suggestions, setSuggestions] = useState([])
   const [shareLabel, setShareLabel] = useState('')
 
-  // The most recent built task, if any. Drives the Share button, which must not
-  // offer to share before there is something to share.
-  const builtTask = [...messages].reverse().find((m) => m.kind === 'done')
-
-  async function onShare() {
-    const url = builtTask?.task_url || ''
-    const text = url
-      ? `${builtTask.task_name || 'Assessment task'} — ${url}`
-      : ''
+  // Share is invoked FROM a task card and receives that card's message, so the
+  // link comes out of the task detail itself. It used to read
+  // `builtTask.task_url`, which finishBuild always wrote as '' — so the button
+  // was permanently disabled and had never once worked.
+  async function onShare(doneMessage) {
+    const task = doneMessage?.task
+    const url = shareableUrl(task)
+    const text = url ? `${task?.title || 'Assessment task'} — ${url}` : ''
     if (!text) return
     try {
       await navigator.clipboard.writeText(text)
@@ -602,23 +601,15 @@ export default function App() {
     startSession()
   }
 
-  function downloadPdf() {
-    const panels = document.querySelectorAll('.stage-log details')
-    const wasOpen = []
-    panels.forEach((d) => {
-      wasOpen.push(d.open)
-      d.open = true
-    })
-    flushSync(() => setPrintDate(new Date().toLocaleString()))
-    const restore = () => {
-      panels.forEach((d, i) => {
-        d.open = wasOpen[i]
-      })
-      window.removeEventListener('afterprint', restore)
-    }
-    window.addEventListener('afterprint', restore)
-    window.print()
-  }
+  // The Download PDF button is gone, but Ctrl+P still is not — stamp the date
+  // on the print header when the browser starts a print instead of when a
+  // button was clicked, so printing keeps working and .print-head is not left
+  // rendering an empty date.
+  useEffect(() => {
+    const stamp = () => setPrintDate(new Date().toLocaleString())
+    window.addEventListener('beforeprint', stamp)
+    return () => window.removeEventListener('beforeprint', stamp)
+  }, [])
 
   // ---- field change handlers ----------------------------------------------
   function onInputChange(v) {
@@ -673,11 +664,6 @@ export default function App() {
   return (
     <>
       <Header
-        onNewTask={newTask}
-        onDownloadPdf={downloadPdf}
-        onShare={onShare}
-        canShare={!!builtTask?.task_url}
-        shareLabel={shareLabel}
         showHistory={showHistory}
         onToggleHistory={() => setShowHistory((v) => !v)}
         showSkills={showSkills}
@@ -711,7 +697,8 @@ export default function App() {
 
           <div className="chat">
             <Chat messages={messages} briefUi={briefUi} onHydrateTask={hydrateTask}
-                  conversationId={sessionId} />
+                  conversationId={sessionId}
+                  onShare={onShare} shareLabel={shareLabel} />
 
             {/* Inside .chat, directly under the greeting, rather than after it.
                 .chat is flex:1, so a sibling here got pushed to the bottom of the
