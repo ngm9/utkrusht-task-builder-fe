@@ -231,3 +231,72 @@
   .tr-main { grid-template-columns: 200px 1fr; }
   .tr-pane.tr-right { display: none; }
 }
+
+/* ── LLM call cards ───────────────────────────────────────────────────
+   The record carries stage, status, usage, request and response; the card
+   shows each rather than one raw-JSON toggle. */
+.tr-call-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tr-stage-tag {
+  color: var(--stage-color, var(--fg-dim)); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+}
+.tr-call-model {
+  font-family: var(--mono); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tr-call-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px;
+  color: var(--fg-dim); margin-bottom: 6px;
+}
+.tr-card-body details > summary {
+  cursor: pointer; margin-top: 4px; font-size: 11px; color: var(--fg-dim);
+}
+.tr-card-body details > summary:hover { color: var(--accent); }
+.tr-msg-block + .tr-msg-block { margin-top: 6px; }
+.tr-msg-role {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--fg-dim); margin: 6px 0 2px;
+}
+/* Prompts run to tens of thousands of characters — cap the height so one
+   message cannot push every later call off the page. */
+.tr-card-body .tr-pre { max-height: 320px; overflow: auto; white-space: pre-wrap; }
+.tr-faint-note { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
+
+.tr-usd { color: var(--accent); }
+.tr-faint { color: var(--fg-dim); }
+.tr-kv dd a { color: var(--accent); word-break: break-all; }
+
+/* ── span breakdown ───────────────────────────────────────────────────
+   Where a stage's time actually went. task_gen / eval / gate / quality /
+   solution all run inside 04_tasks and emit no logs. */
+.tr-spans { display: flex; flex-wrap: wrap; gap: 4px; }
+.tr-span {
+  display: flex; align-items: baseline; gap: 6px; font: inherit; font-size: 11px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 9px; cursor: pointer; color: var(--fg-dim);
+}
+.tr-span:hover { border-color: var(--accent); }
+.tr-span.on { border-color: var(--accent); background: var(--badge-bg); }
+.tr-span.err { border-color: var(--err); }
+.tr-span-name { color: var(--stage-color, var(--fg)); }
+.tr-span-ms { font-family: var(--mono); color: var(--fg-dim); }
+
+/* ── loading states ───────────────────────────────────────────────────
+   Listing runs is a multi-second S3 walk, so the wait has to look
+   deliberate rather than broken. Skeleton rows hold the pane's shape;
+   the pulse marks text that is waiting on a request. */
+@keyframes tr-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.45 } }
+.tr-pulse { animation: tr-pulse 1.4s ease-in-out infinite; }
+
+.trace-root .tr-skeleton { cursor: default; pointer-events: none; }
+.trace-root .tr-skel-bar {
+  height: 9px; border-radius: 4px; background: var(--border);
+  animation: tr-pulse 1.4s ease-in-out infinite;
+}
+/* Stagger so the column reads as one surface filling in, not seven blinks. */
+.trace-root .tr-skeleton:nth-child(2n) .tr-skel-bar { animation-delay: 0.18s; }
+.trace-root .tr-skeleton:nth-child(3n) .tr-skel-bar { animation-delay: 0.36s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tr-pulse, .trace-root .tr-skel-bar { animation: none; opacity: 0.6; }
+}
