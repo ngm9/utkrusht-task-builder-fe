@@ -22,6 +22,28 @@ export function saveNotifyEmail(email) {
   }
 }
 
+// ---- notify name -----------------------------------------------------------
+// First name, remembered for the same reason as the address: both are now
+// REQUIRED to build, so a returning recruiter should not retype them per task.
+const NOTIFY_NAME_KEY = 'taskbuilder.notifyName'
+
+export function loadNotifyName() {
+  try {
+    return localStorage.getItem(NOTIFY_NAME_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveNotifyName(name) {
+  try {
+    if (name) localStorage.setItem(NOTIFY_NAME_KEY, name)
+    else localStorage.removeItem(NOTIFY_NAME_KEY)
+  } catch {
+    // Same reasoning as saveNotifyEmail — a convenience, never a requirement.
+  }
+}
+
 // ---- session history (left panel) -----------------------------------------
 // Each conversation is archived under its own entry so the sidebar can list
 // past sessions and re-open any one read-only. Keyed by the backend session id

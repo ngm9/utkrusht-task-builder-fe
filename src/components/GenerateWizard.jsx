@@ -136,6 +136,10 @@ export default function GenerateWizard({
   pickedScenario,
   onPickScenario,
   notifyEmail,
+  notifyName,
+  onNotifyNameChange,
+  suggestions = [],
+  onUseSuggestion,
   onNotifyEmailChange,
   onBuildTask,
   buildStage, // { stages, status: 'running'|'done'|'failed', result, error }
@@ -148,6 +152,8 @@ export default function GenerateWizard({
   // turns that into an inline correction instead of a failed build.
   const emailTouched = (notifyEmail || '').trim().length > 0
   const emailInvalid = emailTouched && !isValidEmail(notifyEmail)
+  // Both required — see the note on the fields below.
+  const leadReady = !!(notifyName || '').trim() && isValidEmail(notifyEmail || '')
   return (
     <div className="wizard-inline">
       <div className="modal-head">
@@ -176,7 +182,28 @@ export default function GenerateWizard({
               ) : null}
             </div>
 
+            {/* LLM-generated, stack-aware suggestions. The static chips below stay:
+                they encode INFRA choices that map to runtime templates, which a
+                sentence of prose cannot express, and they are the fallback when
+                the endpoint soft-fails (503). Before this, a ReactJs/TypeScript
+                brief was offered Redis, Kafka, PostgreSQL and MCP — backend infra
+                with nothing to do with the role. */}
+            {suggestions.length > 0 && (
+              <div className="wz-group">
+                <div className="wz-group-label">Suggested for this brief (optional)</div>
+                <div className="wz-suggestions">
+                  {suggestions.map((s, i) => (
+                    <button key={i} type="button" className="wz-suggestion"
+                            onClick={() => onUseSuggestion(s)}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="wz-group">
+              <div className="wz-group-label">Add an external service (optional)</div>
               <div className="wz-chips">
                 {SERVICE_CHIPS.map((c) => (
                   <ChipToggle
@@ -190,7 +217,7 @@ export default function GenerateWizard({
             </div>
 
             <div className="wz-group">
-              <div className="wz-group-label">Task shape &amp; focus</div>
+              <div className="wz-group-label">Task shape &amp; focus (optional)</div>
               <div className="wz-chips">
                 {SHAPE_CHIPS.map((c) => (
                   <ChipToggle
@@ -216,7 +243,7 @@ export default function GenerateWizard({
 
             <div className="wz-actions">
               <button className="cta" onClick={onGenerateScenarios}>
-                Generate scenarios →
+                Generate scenarios &amp; task →
               </button>
             </div>
           </div>
@@ -257,11 +284,25 @@ export default function GenerateWizard({
                 </div>
               ))}
 
-            {/* Building takes several minutes and this page is the only handle
-                on the run, so offer to mail the result. Optional by design —
-                leaving it blank just builds silently. */}
+            {/* Name + email are REQUIRED to build. Deliberate: the task is the
+                thing of value, so crossing this line is what marks a serious
+                visitor — and it is the only way we know who is using a product
+                with no login. It also earns its keep for the user, since a run
+                takes minutes and we can mail the result.
+                First name only, not full name. */}
             <div className="wz-group wz-notify">
-              <div className="wz-group-label">Email me when it&rsquo;s ready (optional)</div>
+              <div className="wz-group-label">
+                Enter your name and email to unlock your task
+              </div>
+              <input
+                className="wz-email"
+                type="text"
+                autoComplete="given-name"
+                spellCheck="false"
+                value={notifyName || ''}
+                onChange={(e) => onNotifyNameChange(e.target.value)}
+                placeholder="First name"
+              />
               <input
                 className={`wz-email${emailInvalid ? ' invalid' : ''}`}
                 type="email"
@@ -277,7 +318,7 @@ export default function GenerateWizard({
               <div className="wz-email-hint" id="wz-email-hint">
                 {emailInvalid
                   ? 'That doesn’t look like an email address.'
-                  : 'Takes a few minutes — we’ll email you when the task is ready, or if it fails. You can close this tab.'}
+                  : 'Building usually takes 5–10 minutes, longer if we verify it in a sandbox. We’ll email you when it’s ready — or if it fails — so you can close this tab.'}
               </div>
             </div>
 
@@ -287,7 +328,7 @@ export default function GenerateWizard({
               </button>
               <button
                 className="cta"
-                disabled={scenarioStage.mode === 'prep' || emailInvalid}
+                disabled={scenarioStage.mode === 'prep' || !leadReady}
                 onClick={onBuildTask}
               >
                 Build this task →
@@ -300,7 +341,7 @@ export default function GenerateWizard({
               {buildStage.status === 'running'
                 ? 'Generating your task — prompts, code generation, and evaluation.'
                 : buildStage.status === 'done'
-                  ? 'Done — your task is ready.'
+                  ? 'Your task is ready — use it in your next hiring round.'
                   : 'Generation failed.'}
             </div>
 
@@ -308,8 +349,13 @@ export default function GenerateWizard({
                 collecting the address is that the user can walk away. */}
             {buildStage.status === 'running' && emailTouched && !emailInvalid ? (
               <div className="wz-notify-note">
-                We&rsquo;ll email <b>{notifyEmail.trim()}</b> when it&rsquo;s done — you can close
-                this tab.
+                Usually 5&ndash;10 minutes. We&rsquo;ll email <b>{notifyEmail.trim()}</b> when
+                it&rsquo;s done — you can close this tab.
+              </div>
+            ) : null}
+            {buildStage.status === 'done' && emailTouched && !emailInvalid ? (
+              <div className="wz-notify-note">
+                A copy is on its way to <b>{notifyEmail.trim()}</b>.
               </div>
             ) : null}
 
