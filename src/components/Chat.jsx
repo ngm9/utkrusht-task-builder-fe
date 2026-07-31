@@ -141,10 +141,14 @@ export default function Chat({ messages, briefUi, onHydrateTask, conversationId,
                            onShare={() => onShare?.(m)} shareLabel={shareLabel} />
         }
         if (m.kind === 'brief') {
+          // Full width and no avatar: this is a panel showing the state of the
+          // brief, not the bot speaking, so it should not read as a message.
           return (
-            <Row role="bot" cls="summary brief-card" key={m.id}>
-              <BriefCard m={m} ui={briefUi} />
-            </Row>
+            <div className="row bot brief-card-row" key={m.id}>
+              <div className="bubble summary brief-card">
+                <BriefCard m={m} ui={briefUi} />
+              </div>
+            </div>
           )
         }
         // bubble — animated dots while pending; bot replies render markdown,

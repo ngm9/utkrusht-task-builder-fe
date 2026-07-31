@@ -228,7 +228,7 @@ export default function App() {
   }, [wizardOpen])
 
   // ---- brief panel ---------------------------------------------------------
-  function updateBrief(data) {
+  function updateBrief(data, { beforeId } = {}) {
     const ns = {
       brief: data.brief || {},
       missing: data.missing_slots || [],
@@ -236,10 +236,18 @@ export default function App() {
     }
     panelStateRef.current = ns
     setPanelState(ns)
-    setMessages((prev) => [
-      ...prev.filter((m) => m.kind !== 'brief'),
-      { id: nextId(), kind: 'brief', ...ns },
-    ])
+    setMessages((prev) => {
+      // One card, moved rather than duplicated.
+      const without = prev.filter((m) => m.kind !== 'brief')
+      const card = { id: nextId(), kind: 'brief', ...ns }
+      // Sit it between the user's message and the reply to it. Appending to the
+      // end instead put it below the reply, where it read as a footer to the
+      // whole conversation rather than the state of the turn you just took.
+      const at = beforeId ? without.findIndex((m) => m.id === beforeId) : -1
+      return at === -1
+        ? [...without, card]
+        : [...without.slice(0, at), card, ...without.slice(at)]
+    })
   }
 
   // ---- conversation --------------------------------------------------------
@@ -290,7 +298,7 @@ export default function App() {
             : [...prev, { id: nextId(), kind: 'request', kind_: data.request.kind, subject }],
         )
       }
-      updateBrief(data)
+      updateBrief(data, { beforeId: thinkingId })
     } catch {
       patchMessage(thinkingId, { text: 'Network error — please try again.', pending: false })
     } finally {

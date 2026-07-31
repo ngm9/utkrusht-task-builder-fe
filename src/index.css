@@ -783,6 +783,30 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .driver-popover.uk-tour .driver-popover-close-btn { color:var(--faint); }
 
 
+/* ---- inline task brief -------------------------------------------------
+   Lives in the conversation between your message and the reply to it, so the
+   brief reads as the state of the turn you just took. It used to be appended to
+   the end of the stream, which put it below the reply and made it look like a
+   footer on the whole chat. */
+
+/* Inset by the avatar gutter on BOTH sides (28px avatar + 10px gap) so the card
+   lines up with the bubble column rather than starting where the avatars sit and
+   running past where the user's messages end. */
+.brief-card-row { width: 100%; padding: 0 38px; }
+.brief-card-row .bubble.brief-card { max-width: 100%; width: 100%; }
+
+/* The slot cells carry `margin:0 -10px` so their hover/highlight bleeds past the
+   card padding — right for the single-column layout it was written for, wrong in
+   a two-column grid, where the columns then overlap each other and the row
+   borders stop lining up (it drew a stray box around one cell). */
+.brief-card .slots li { margin: 0; padding: 8px 0; }
+.brief-card .slots li.asking,
+.brief-card .slots li.filled:hover { padding: 8px 10px; margin: 0 -10px; }
+
+/* Five slots in two columns leaves the last one alone on its row, with a border
+   under only half the width. Let it span instead — it fills the gap and the rule
+   reaches across. */
+.brief-card .slots li:last-child:nth-child(odd) { grid-column: 1 / -1; }
 /* ── /trace — pipeline run viewer ──────────────────────────────────────
    Internal debugging surface, so it favours density over the roominess of
    the chat: many runs and long logs on screen at once. */
