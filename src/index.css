@@ -390,8 +390,19 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .task-detail { display:flex; flex-direction:column; gap:14px; text-align:left;
   padding:4px 0 8px; }
 .task-detail-head { display:flex; flex-direction:column; gap:8px; }
+/* Title and Share on one line, Share pinned right. `min-width:0` on the title
+   so a long title ellipsises instead of shoving the button off the card. */
+.task-detail-titlerow { display:flex; align-items:flex-start; gap:12px; }
 .task-detail-title { margin:0; font-size:17px; font-weight:700; line-height:1.4;
-  color:var(--text); }
+  color:var(--text); flex:1; min-width:0; }
+.task-share {
+  flex:none; font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+  background:var(--card); color:var(--uk-green-deep);
+  border:1px solid var(--uk-green); border-radius:8px; padding:5px 14px;
+}
+.task-share:hover { background:var(--green-tint); }
+/* A printed task should not carry a control nobody can press. */
+@media print { .task-share { display:none; } }
 .task-detail-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px;
   font-size:13px; color:var(--text); }
 .task-detail-time b { font-weight:600; }
@@ -693,6 +704,10 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   cursor:pointer;
 }
 .request-card__send:hover:not(:disabled) { background:var(--uk-green-deep); }
+/* Reassurance under the button, where the hesitation actually happens. */
+.request-card__privacy {
+  margin:2px 0 0; font-size:12px; line-height:1.5; color:var(--faint);
+}
 /* Disabled until both fields are filled — a note with no address is
    unactionable, an address with no note says nothing. */
 .request-card__send:disabled { background:var(--faint); cursor:not-allowed; }
@@ -708,14 +723,40 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   background:var(--card); color:var(--text);
   border:0.5px solid var(--border); border-radius:var(--radius);
   box-shadow:0 8px 30px rgba(28,25,23,.13);
-  font-family:inherit; max-width:330px; padding:16px 18px;
+  font-family:inherit; max-width:380px; padding:18px 20px;
+  /* Root fix for the alignment: `all:unset` above means inheritable properties
+     come from <body>, so anything the page sets leaks in here. Pin them once
+     and every child starts from the same left edge. */
+  text-align:left; text-indent:0; letter-spacing:normal; word-spacing:normal;
 }
+/* The welcome step has no target element, so it is a modal and should sit dead
+   centre. driver positions it with inline styles from a measured width, which
+   is why it drifted; override those and centre with a transform, which needs
+   no measurement at all. !important is required — driver writes left/top
+   inline on every reposition (resize, scroll). */
+.driver-popover.uk-tour-center {
+  left:50% !important; top:50% !important;
+  right:auto !important; bottom:auto !important;
+  transform:translate(-50%, -50%);
+}
+/* The close button is absolutely positioned over the top-right corner with
+   nothing reserving space for it, so the title needs the gutter or a two-line
+   title runs underneath the ×. */
 .driver-popover.uk-tour .driver-popover-title {
-  font-size:15px; font-weight:600; color:var(--uk-green-deep);
+  font-size:16px; font-weight:600; color:var(--uk-green-deep);
+  line-height:1.4; display:block; margin:0 28px 0 0; padding:0;
+}
+.driver-popover.uk-tour .driver-popover-close-btn {
+  top:12px; right:12px; color:var(--faint);
 }
 .driver-popover.uk-tour .driver-popover-description {
-  font-size:13.5px; line-height:1.6; color:var(--muted); margin-top:4px;
+  font-size:13.5px; line-height:1.6; color:var(--muted);
+  margin:10px 0 0; padding:0;
 }
+/* The intro step is several paragraphs. Browser default <p> margins collapse
+   oddly inside the popover, so space them explicitly and kill the outer ones. */
+.driver-popover.uk-tour .driver-popover-description p { margin:0 0 10px; }
+.driver-popover.uk-tour .driver-popover-description p:last-child { margin-bottom:0; }
 .driver-popover.uk-tour .driver-popover-progress-text {
   font-size:12px; color:var(--faint);
 }
@@ -766,3 +807,66 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
    under only half the width. Let it span instead — it fills the gap and the rule
    reaches across. */
 .brief-card .slots li:last-child:nth-child(odd) { grid-column: 1 / -1; }
+/* ── /trace — pipeline run viewer ──────────────────────────────────────
+   Internal debugging surface, so it favours density over the roominess of
+   the chat: many runs and long logs on screen at once. */
+.trace-page { padding:22px 26px; height:100%; overflow-y:auto; }
+.trace-page h1 { font-size:18px; margin:0 0 16px; letter-spacing:-0.02em; }
+.trace-page h3 { font-size:13px; margin:18px 0 6px; color:var(--uk-green-deep); }
+.trace-empty { color:var(--muted); font-size:13px; padding:10px 0; }
+.trace-faint { color:var(--faint); font-size:12px; }
+
+.trace-layout { display:grid; grid-template-columns:300px minmax(0,1fr);
+  gap:18px; align-items:start; }
+
+.trace-list { list-style:none; margin:0; padding:0; display:flex;
+  flex-direction:column; gap:4px; max-height:78vh; overflow-y:auto; }
+.trace-list button { width:100%; text-align:left; background:var(--card);
+  border:0.5px solid var(--border); border-radius:8px; padding:8px 10px;
+  font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:2px; }
+.trace-list button:hover { border-color:var(--uk-green-mid); }
+.trace-list button.on { background:var(--green-tint);
+  border-color:var(--uk-green); }
+.trace-run-top { font-size:13px; color:var(--text); }
+
+.trace-pane { min-width:0; background:var(--card);
+  border:0.5px solid var(--border); border-radius:var(--radius); padding:16px 18px; }
+.trace-meta { font-size:13px; color:var(--muted); display:flex;
+  flex-direction:column; gap:2px; }
+.trace-meta code { background:var(--bg); padding:1px 5px; border-radius:5px;
+  font-size:12px; }
+
+.trace-stages { list-style:none; margin:0; padding:0; }
+.trace-stages li { display:flex; justify-content:space-between; gap:10px;
+  padding:5px 8px; border-radius:6px; font-size:13px; }
+.trace-stages li.ok  { background:var(--green-tint); }
+.trace-stages li.bad { background:var(--amber-tint); color:var(--amber-text); }
+
+.trace-logbtns { display:flex; flex-wrap:wrap; gap:6px; }
+.trace-chip { background:var(--card); border:0.5px solid var(--border);
+  border-radius:999px; padding:4px 12px; font:inherit; font-size:12px;
+  color:var(--muted); cursor:pointer; }
+.trace-chip:hover { border-color:var(--uk-green-mid); }
+.trace-chip.on { background:var(--uk-green); color:#fff;
+  border-color:var(--uk-green); }
+
+/* Logs are the reason this page exists — monospace, scrollable, and never
+   wrapped, because a wrapped stack trace is unreadable. */
+.trace-pre { margin:10px 0 0; background:#1c1917; color:#e7e5e4;
+  border-radius:8px; padding:12px 14px; font-size:12px; line-height:1.55;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  max-height:52vh; overflow:auto; white-space:pre; }
+
+.trace-calls { list-style:none; margin:0; padding:0; display:flex;
+  flex-direction:column; gap:8px; }
+.trace-calls li { border:0.5px solid var(--border); border-radius:8px;
+  padding:8px 10px; }
+.trace-callhead { display:flex; justify-content:space-between; gap:10px;
+  align-items:baseline; font-size:13px; }
+.trace-calls summary { cursor:pointer; font-size:12px; color:var(--muted);
+  margin-top:4px; }
+
+@media (max-width:900px) {
+  .trace-layout { grid-template-columns:minmax(0,1fr); }
+  .trace-list { max-height:none; }
+}

@@ -1,0 +1,302 @@
+/* trace_ui's palette, ported verbatim.
+ *
+ * Scoped to .trace-root rather than :root on purpose: the chat app is the green
+ * Utkrusht brand on a warm-grey background, and this is a GitHub-dark developer
+ * tool. Leaking these tokens into :root would repaint the whole product.
+ *
+ * Both themes are trace_ui's originals — dark is the default, light is the
+ * toggle, and [data-theme] is set on .trace-root by TraceApp. */
+
+.trace-root {
+  --bg: #0d1117;
+  --bg-panel: #11161d;
+  --bg-elev: #161b22;
+  --border: #21262d;
+  --fg: #c9d1d9;
+  --fg-dim: #8b949e;
+  --accent: #58a6ff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --active: #1f6feb;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --hover: rgba(255, 255, 255, .04);
+  --active-bg: rgba(31, 111, 235, .10);
+  --badge-bg: rgba(88, 166, 255, .15);
+  --scrollbar-thumb: #2d333b;
+  --shadow: rgba(0, 0, 0, .4);
+  --lvl-error: #ff7b72;
+  --lvl-warn: #e3b341;
+  --lvl-ok: #56d364;
+  --lvl-info: #79c0ff;
+  --lvl-debug: #a5a5b0;
+  --lvl-error-bg: rgba(248, 81, 73, .12);
+  --lvl-warn-bg: rgba(227, 179, 65, .10);
+  /* Per-stage hues are generated (see stageHue) so every stage keeps a stable,
+     distinguishable colour without hand-picking one per stage name. */
+  --stage-sat: 70%;
+  --stage-l: 64%;
+}
+
+.trace-root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-panel: #f6f8fa;
+  --bg-elev: #eef1f4;
+  --border: #d0d7de;
+  --fg: #1f2328;
+  --fg-dim: #59636e;
+  --accent: #0969da;
+  --ok: #1a7f37;
+  --warn: #8a5d00;
+  --err: #cf222e;
+  --active: #0969da;
+  --hover: rgba(0, 0, 0, .05);
+  --active-bg: rgba(9, 105, 218, .08);
+  --badge-bg: rgba(9, 105, 218, .12);
+  --scrollbar-thumb: #c4ccd4;
+  --shadow: rgba(0, 0, 0, .12);
+  --lvl-error: #cf222e;
+  --lvl-warn: #8a5d00;
+  --lvl-ok: #1a7f37;
+  --lvl-info: #0969da;
+  --lvl-debug: #6e7781;
+  --lvl-error-bg: rgba(207, 34, 46, .08);
+  --lvl-warn-bg: rgba(138, 93, 0, .08);
+  --stage-l: 38%;
+}
+
+/* ---- shell ------------------------------------------------------------- */
+.trace-root {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg); color: var(--fg);
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+}
+.trace-root *::-webkit-scrollbar { width: 10px; height: 10px; }
+.trace-root *::-webkit-scrollbar-track { background: transparent; }
+.trace-root *::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb); border-radius: 6px; border: 2px solid var(--bg);
+}
+
+.tr-header {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.tr-header h1 { font-size: 13px; margin: 0; font-weight: 600; letter-spacing: .01em; }
+.tr-header h1 .dot { color: var(--ok); margin-right: 4px; }
+.tr-search, .tr-picker, .tr-select {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px;
+}
+.tr-search { width: 220px; }
+.tr-search:focus, .tr-picker:focus, .tr-select:focus {
+  outline: none; border-color: var(--accent);
+}
+.tr-btn {
+  background: var(--bg-elev); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer;
+}
+.tr-btn:hover { background: var(--hover); border-color: var(--accent); }
+.tr-conn {
+  font-size: 11px; color: var(--fg-dim); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 8px;
+}
+.tr-conn.live { color: var(--ok); border-color: var(--ok); }
+.tr-totals { margin-left: auto; display: flex; gap: 14px; font-size: 11px; color: var(--fg-dim); }
+.tr-totals b { color: var(--fg); font-weight: 600; }
+
+/* ---- 3-pane grid — trace_ui's exact proportions ------------------------ */
+/* index.css styles bare `main` and `header` for the chat app (centred column,
+   26px padding). This page uses those elements too, so without an explicit
+   reset the grid inherits align-items:center and every pane floats in the
+   middle of the viewport. Scoped, so the chat app keeps its own rules. */
+.trace-root main.tr-main,
+.trace-root header.tr-header {
+  align-items: initial; padding: 0; max-width: none; width: auto;
+}
+.trace-root header.tr-header { align-items: center; padding: 8px 12px; }
+.tr-main { flex: 1 1 auto; display: grid; grid-template-columns: 240px 1fr 380px; min-height: 0; }
+.tr-pane { min-height: 0; min-width: 0; display: flex; flex-direction: column;
+  border-right: 1px solid var(--border); }
+.tr-pane:last-child { border-right: none; }
+.tr-pane-head {
+  flex: 0 0 auto; padding: 7px 12px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--fg-dim); background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.tr-pane-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* ---- left: stages ------------------------------------------------------ */
+.tr-stage {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 12px; background: none; border: 0; border-left: 2px solid transparent;
+  color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.tr-stage:hover { background: var(--hover); }
+.tr-stage.on { background: var(--active-bg); border-left-color: var(--accent); }
+.tr-stage-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 12px; }
+.tr-stage-meta { font-size: 11px; color: var(--fg-dim); }
+.tr-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--fg-dim); }
+.tr-dot.ok { background: var(--ok); }
+.tr-dot.err { background: var(--err); }
+
+/* ---- centre: logs ------------------------------------------------------ */
+.tr-log { font-family: var(--mono); font-size: 12px; padding: 4px 0; }
+.tr-log.compact .tr-row { padding-top: 0; padding-bottom: 0; }
+.tr-row {
+  display: grid; grid-template-columns: 86px 1fr;  /* stage badge | message */
+  gap: 8px; padding: 1px 12px; align-items: start;
+}
+.tr-row:hover { background: var(--hover); }
+.tr-row.error { background: var(--lvl-error-bg); }
+.tr-row.warn { background: var(--lvl-warn-bg); }
+.tr-badge {
+  font-size: 10px; text-align: right; color: var(--stage-color, var(--fg-dim));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 1px;
+}
+.tr-msg { white-space: pre-wrap; word-break: break-word; }
+.tr-msg.error { color: var(--lvl-error); }
+.tr-msg.warn { color: var(--lvl-warn); }
+.tr-msg.ok { color: var(--lvl-ok); }
+.tr-msg.info { color: var(--lvl-info); }
+.tr-msg.debug { color: var(--lvl-debug); }
+
+.tr-resume {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px;
+  background: var(--accent); color: #fff; border: 0; border-radius: 999px;
+  padding: 5px 14px; font: inherit; font-size: 12px; cursor: pointer;
+  box-shadow: 0 3px 10px var(--shadow);
+}
+.tr-center-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex;
+  flex-direction: column; }
+
+/* ---- right: result + traces ------------------------------------------- */
+.tr-card { border: 1px solid var(--border); border-radius: 8px; margin: 10px;
+  background: var(--bg-panel); }
+.tr-card-head {
+  padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px;
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+}
+.tr-card-body { padding: 8px 10px; font-size: 12px; color: var(--fg-dim); }
+.tr-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+.tr-kv dt { color: var(--fg-dim); }
+.tr-kv dd { margin: 0; color: var(--fg); word-break: break-all; }
+.tr-badge-pill {
+  background: var(--badge-bg); color: var(--accent); border-radius: 999px;
+  padding: 1px 8px; font-size: 11px;
+}
+.tr-badge-pill.ok { background: rgba(63,185,80,.15); color: var(--ok); }
+.tr-badge-pill.err { background: rgba(248,81,73,.15); color: var(--err); }
+
+/* ---- modal ------------------------------------------------------------- */
+.tr-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center; z-index: 40;
+}
+.tr-modal {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  width: min(1000px, 92vw); max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px var(--shadow);
+}
+.tr-modal-head {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.tr-modal-head h2 { font-size: 13px; margin: 0; font-weight: 600; }
+.tr-modal-close { margin-left: auto; background: none; border: 0; color: var(--fg-dim);
+  font-size: 18px; cursor: pointer; line-height: 1; }
+.tr-tabs { display: flex; gap: 4px; padding: 8px 14px 0; }
+.tr-tab {
+  background: none; border: 1px solid transparent; border-bottom: 2px solid transparent;
+  color: var(--fg-dim); padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer;
+}
+.tr-tab.on { color: var(--fg); border-bottom-color: var(--accent); }
+.tr-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px; }
+
+.tr-pre {
+  margin: 0; background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; font-family: var(--mono); font-size: 12px;
+  line-height: 1.5; overflow: auto; max-height: 60vh; white-space: pre;
+}
+.tr-scn { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+  margin-bottom: 8px; font-size: 12px; white-space: pre-wrap; }
+.tr-scn.locked { border-color: var(--ok); background: rgba(63,185,80,.06); }
+.tr-empty { color: var(--fg-dim); font-size: 12px; padding: 14px 12px; }
+.tr-art-title { font-size: 12px; color: var(--fg-dim); margin: 10px 0 4px; }
+
+@media (max-width: 1100px) {
+  .tr-main { grid-template-columns: 200px 1fr; }
+  .tr-pane.tr-right { display: none; }
+}
+
+/* ── LLM call cards ───────────────────────────────────────────────────
+   The record carries stage, status, usage, request and response; the card
+   shows each rather than one raw-JSON toggle. */
+.tr-call-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tr-stage-tag {
+  color: var(--stage-color, var(--fg-dim)); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+}
+.tr-call-model {
+  font-family: var(--mono); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tr-call-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px;
+  color: var(--fg-dim); margin-bottom: 6px;
+}
+.tr-card-body details > summary {
+  cursor: pointer; margin-top: 4px; font-size: 11px; color: var(--fg-dim);
+}
+.tr-card-body details > summary:hover { color: var(--accent); }
+.tr-msg-block + .tr-msg-block { margin-top: 6px; }
+.tr-msg-role {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--fg-dim); margin: 6px 0 2px;
+}
+/* Prompts run to tens of thousands of characters — cap the height so one
+   message cannot push every later call off the page. */
+.tr-card-body .tr-pre { max-height: 320px; overflow: auto; white-space: pre-wrap; }
+.tr-faint-note { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
+
+.tr-usd { color: var(--accent); }
+.tr-faint { color: var(--fg-dim); }
+.tr-kv dd a { color: var(--accent); word-break: break-all; }
+
+/* ── span breakdown ───────────────────────────────────────────────────
+   Where a stage's time actually went. task_gen / eval / gate / quality /
+   solution all run inside 04_tasks and emit no logs. */
+.tr-spans { display: flex; flex-wrap: wrap; gap: 4px; }
+.tr-span {
+  display: flex; align-items: baseline; gap: 6px; font: inherit; font-size: 11px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 9px; cursor: pointer; color: var(--fg-dim);
+}
+.tr-span:hover { border-color: var(--accent); }
+.tr-span.on { border-color: var(--accent); background: var(--badge-bg); }
+.tr-span.err { border-color: var(--err); }
+.tr-span-name { color: var(--stage-color, var(--fg)); }
+.tr-span-ms { font-family: var(--mono); color: var(--fg-dim); }
+
+/* ── loading states ───────────────────────────────────────────────────
+   Listing runs is a multi-second S3 walk, so the wait has to look
+   deliberate rather than broken. Skeleton rows hold the pane's shape;
+   the pulse marks text that is waiting on a request. */
+@keyframes tr-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.45 } }
+.tr-pulse { animation: tr-pulse 1.4s ease-in-out infinite; }
+
+.trace-root .tr-skeleton { cursor: default; pointer-events: none; }
+.trace-root .tr-skel-bar {
+  height: 9px; border-radius: 4px; background: var(--border);
+  animation: tr-pulse 1.4s ease-in-out infinite;
+}
+/* Stagger so the column reads as one surface filling in, not seven blinks. */
+.trace-root .tr-skeleton:nth-child(2n) .tr-skel-bar { animation-delay: 0.18s; }
+.trace-root .tr-skeleton:nth-child(3n) .tr-skel-bar { animation-delay: 0.36s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tr-pulse, .trace-root .tr-skel-bar { animation: none; opacity: 0.6; }
+}

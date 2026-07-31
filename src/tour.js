@@ -33,9 +33,18 @@ const INTRO_STEPS = [
     // that opens by pointing at a sidebar assumes the visitor already knows what
     // the product is. They don't; that is the first thing to answer.
     popover: {
-      title: 'This builds coding assessments for you',
+      // Centred by CSS, not by driver: driver computes left from
+      // `innerWidth/2 - measuredWidth/2`, and the measurement is taken against
+      // its own default max-width before our wider one is in play, so the
+      // modal lands off-centre. A transform-based centre cannot drift.
+      popoverClass: 'uk-tour uk-tour-center',
+      title: 'Welcome to Task Builder',
       description:
-        'Tell us who you are hiring and we generate a real task — a problem statement plus a starter repo your candidates can clone and run. No forms: it is one conversation, and we fill in the details as you go.',
+        '<p>Task Builder allows you to build production environments for your '
+        + 'candidates to solve real problems in.</p>'
+        + '<p>A problem consists of a github repo, sometimes infrastructure '
+        + 'e.g. databases, APIs etc.</p>'
+        + '<p>Just chat your way through it.</p>',
     },
   },
   {
