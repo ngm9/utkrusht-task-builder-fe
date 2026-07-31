@@ -31,6 +31,33 @@ configureRecruiterClient({
   },
 })
 
+/**
+ * Submit the in-chat request form.
+ *
+ * Hand-written rather than imported from @ngm9/recruiter-client because the
+ * generated client does not carry `createTaskBuilderRequest` yet — the backend
+ * route is still on an unmerged branch, so no published client was generated
+ * from a spec containing it. Swap the body of this function for the generated
+ * op once it appears; every call site already goes through here.
+ *
+ * Resolves on 202. Throws on anything else so the card can show its error state.
+ */
+export async function createTaskBuilderRequest(conversationId, body) {
+  const res = await fetch(
+    `${API_BASE}/v2/task-builder/sessions/${conversationId}/requests`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Token-Source': 'recruiter' },
+      body: JSON.stringify(body),
+    },
+  )
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`request failed: ${res.status} ${detail.slice(0, 200)}`)
+  }
+  return res.json().catch(() => ({}))
+}
+
 // NOTE: no listTaskBuilderSessions — Flask has no GET /v2/task-builder/sessions
 // (only POST). It existed in a hand-packed client build; the published one is
 // generated from the real OpenAPI spec, so re-exporting it fails the build.

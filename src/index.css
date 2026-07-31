@@ -448,9 +448,22 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 
 /* ---- starter suggestion chips --------------------------------------------- */
 /* Starter suggestions — above the input dock; every chip the same width. */
-.starters { width:100%; max-width:680px; margin-top:18px; }
+/* padding-left matches the message gutter — .row is a 28px avatar + 10px gap —
+   so the examples line up with the bubble they answer instead of hanging 38px
+   further left. */
+.starters { width:100%; max-width:680px; margin-top:18px; padding-left:38px; }
 .starters-label { font-size:12px; color:var(--faint); margin-bottom:8px; }
 .starters-row { display:flex; flex-direction:column; gap:8px; }
+
+/* "or" rule under the examples: the chips look like the only way in, so say
+   plainly that typing is the other one. */
+.starters-or {
+  display:flex; align-items:center; gap:10px;
+  margin-top:14px; font-size:12px; color:var(--faint);
+}
+.starters-or::before, .starters-or::after {
+  content:""; flex:1; height:1px; background:var(--border);
+}
 .chip {
   width:100%; background:var(--card); border:0.5px solid var(--border);
   border-radius:12px; padding:9px 14px; font:inherit; font-size:13px;
@@ -534,6 +547,20 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   border:1.5px solid var(--faint); display:inline-flex; align-items:center;
   justify-content:center; font-size:11px; line-height:1; color:#fff; }
 .wz-chip.on .wz-box { background:var(--uk-green); border-color:var(--uk-green); }
+
+/* Completion-email field — sits directly above the Build action, since it is
+   about what happens AFTER you click it. Borrows .instructions' input idiom. */
+.wz-notify { gap:6px; }
+.wz-email { width:100%; font:inherit; font-size:13px;
+  color:var(--text); background:var(--card); border:0.5px solid var(--border);
+  border-radius:8px; padding:9px 10px; line-height:1.5; }
+.wz-email:focus { outline:none; border-color:var(--uk-green); }
+.wz-email.invalid { border-color:var(--amber-text); }
+.wz-email-hint { font-size:11px; color:var(--faint); line-height:1.45; }
+.wz-email.invalid ~ .wz-email-hint { color:var(--amber-text); }
+.wz-notify-note { font-size:12px; color:var(--uk-green-deep);
+  background:var(--green-tint); border-radius:8px; padding:8px 10px;
+  line-height:1.45; }
 
 .wz-actions { display:flex; align-items:center; justify-content:flex-end;
   gap:12px; margin-top:2px; }
@@ -625,3 +652,75 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .prep-stage.ok .prep-stage-head { color:var(--uk-green-deep); }
 .prep-stage.failed .prep-stage-head { color:#b42318; }
 .prep-stage-head .dot { width:16px; text-align:center; color:var(--uk-green); font-size:12px; }
+
+
+/* ── In-chat request form ──────────────────────────────────────────────
+   Shown when the bot hits a dead-end it cannot build and offers to forward
+   the ask to the team. Sits inside a bot .summary row, so it inherits the
+   card background — these rules only lay out the fields. */
+.request-card { display:flex; flex-direction:column; gap:8px; }
+.request-card__title { font-weight:600; color:var(--uk-green-deep); }
+.request-card__prompt { margin:0; color:var(--muted); font-size:13.5px; }
+.request-card__note,
+.request-card__email {
+  width:100%; padding:9px 11px; border:1px solid var(--border);
+  border-radius:8px; background:var(--card); color:var(--text);
+  font:inherit; font-size:14px;
+}
+.request-card__note { resize:vertical; min-height:64px; }
+.request-card__note:focus, .request-card__email:focus {
+  outline:none; border-color:var(--uk-green-mid);
+}
+.request-card__send {
+  align-self:flex-start; background:var(--uk-green); color:#fff; border:0;
+  padding:8px 16px; border-radius:8px; font:inherit; font-weight:600;
+  cursor:pointer;
+}
+.request-card__send:hover:not(:disabled) { background:var(--uk-green-deep); }
+/* Disabled until both fields are filled — a note with no address is
+   unactionable, an address with no note says nothing. */
+.request-card__send:disabled { background:var(--faint); cursor:not-allowed; }
+.request-card__error { margin:0; color:var(--amber-text); font-size:13px; }
+.request-card--sent { color:var(--uk-green-deep); font-size:14px; }
+
+
+/* ── First-run tour (driver.js) ────────────────────────────────────────
+   driver.css ships a generic light theme; these overrides put it on the
+   Utkrusht palette so the tour doesn't look bolted on. Scoped to .uk-tour
+   (set via popoverClass) so no other driver instance is affected. */
+.driver-popover.uk-tour {
+  background:var(--card); color:var(--text);
+  border:0.5px solid var(--border); border-radius:var(--radius);
+  box-shadow:0 8px 30px rgba(28,25,23,.13);
+  font-family:inherit; max-width:330px; padding:16px 18px;
+}
+.driver-popover.uk-tour .driver-popover-title {
+  font-size:15px; font-weight:600; color:var(--uk-green-deep);
+}
+.driver-popover.uk-tour .driver-popover-description {
+  font-size:13.5px; line-height:1.6; color:var(--muted); margin-top:4px;
+}
+.driver-popover.uk-tour .driver-popover-progress-text {
+  font-size:12px; color:var(--faint);
+}
+/* Match the app's arrow to the card, not driver's default white. */
+.driver-popover.uk-tour .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color:var(--card); }
+.driver-popover.uk-tour .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color:var(--card); }
+.driver-popover.uk-tour .driver-popover-arrow-side-left.driver-popover-arrow { border-left-color:var(--card); }
+.driver-popover.uk-tour .driver-popover-arrow-side-right.driver-popover-arrow { border-right-color:var(--card); }
+
+.driver-popover.uk-tour .driver-popover-navigation-btns { gap:8px; margin-top:12px; }
+.driver-popover.uk-tour .driver-popover-navigation-btns button {
+  background:var(--uk-green); color:#fff; border:0; text-shadow:none;
+  border-radius:8px; padding:6px 14px; font:inherit; font-size:13px;
+  font-weight:600; cursor:pointer;
+}
+.driver-popover.uk-tour .driver-popover-navigation-btns button:hover {
+  background:var(--uk-green-deep);
+}
+/* Back reads as secondary — one primary action per step. */
+.driver-popover.uk-tour .driver-popover-prev-btn {
+  background:transparent !important; color:var(--muted) !important;
+  border:1px solid var(--border) !important;
+}
+.driver-popover.uk-tour .driver-popover-close-btn { color:var(--faint); }

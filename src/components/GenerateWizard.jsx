@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SERVICE_CHIPS, SHAPE_CHIPS } from '../constants.js'
-import { parseScenario } from '../lib.js'
+import { isValidEmail, parseScenario } from '../lib.js'
 import TaskDetailCard from './TaskDetailCard.jsx'
 
 function ChipToggle({ on, label, onClick }) {
@@ -135,12 +135,19 @@ export default function GenerateWizard({
   scenarioStage, // { mode: 'prep'|'list'|'error', prepStages, list, error }
   pickedScenario,
   onPickScenario,
+  notifyEmail,
+  onNotifyEmailChange,
   onBuildTask,
   buildStage, // { stages, status: 'running'|'done'|'failed', result, error }
   onBuildDone,
   onClose,
 }) {
   if (!open) return null
+  // Optional field: empty is fine, but a half-typed address must not start a
+  // build — the server rejects it and the run never happens. Blocking here
+  // turns that into an inline correction instead of a failed build.
+  const emailTouched = (notifyEmail || '').trim().length > 0
+  const emailInvalid = emailTouched && !isValidEmail(notifyEmail)
   return (
     <div className="wizard-inline">
       <div className="modal-head">
@@ -250,11 +257,39 @@ export default function GenerateWizard({
                 </div>
               ))}
 
+            {/* Building takes several minutes and this page is the only handle
+                on the run, so offer to mail the result. Optional by design —
+                leaving it blank just builds silently. */}
+            <div className="wz-group wz-notify">
+              <div className="wz-group-label">Email me when it&rsquo;s ready (optional)</div>
+              <input
+                className={`wz-email${emailInvalid ? ' invalid' : ''}`}
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                spellCheck="false"
+                value={notifyEmail || ''}
+                onChange={(e) => onNotifyEmailChange(e.target.value)}
+                placeholder="you@company.com"
+                aria-invalid={emailInvalid}
+                aria-describedby="wz-email-hint"
+              />
+              <div className="wz-email-hint" id="wz-email-hint">
+                {emailInvalid
+                  ? 'That doesn’t look like an email address.'
+                  : 'Takes a few minutes — we’ll email you when the task is ready, or if it fails. You can close this tab.'}
+              </div>
+            </div>
+
             <div className="wz-actions">
               <button className="link-btn" type="button" onClick={onBack}>
                 ← Back
               </button>
-              <button className="cta" disabled={scenarioStage.mode === 'prep'} onClick={onBuildTask}>
+              <button
+                className="cta"
+                disabled={scenarioStage.mode === 'prep' || emailInvalid}
+                onClick={onBuildTask}
+              >
                 Build this task →
               </button>
             </div>
@@ -268,6 +303,15 @@ export default function GenerateWizard({
                   ? 'Done — your task is ready.'
                   : 'Generation failed.'}
             </div>
+
+            {/* Say it out loud once the run is in flight — the whole point of
+                collecting the address is that the user can walk away. */}
+            {buildStage.status === 'running' && emailTouched && !emailInvalid ? (
+              <div className="wz-notify-note">
+                We&rsquo;ll email <b>{notifyEmail.trim()}</b> when it&rsquo;s done — you can close
+                this tab.
+              </div>
+            ) : null}
 
             <PrepProgress prepStages={buildStage.stages} showLogs={false} />
 

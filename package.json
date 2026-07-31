@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ngm9/recruiter-client": "2.1.0-dev.21",
+    "driver.js": "^1.8.0",
     "posthog-js": "^1.402.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
