@@ -7,10 +7,14 @@ import {
   prepareTaskBuilderRun,
   generateTaskBuilderRun,
   getTaskBuilderRun,
+  getTaskBuilderInstructionSuggestions,
 } from './client.js'
 import { fetchTaskDetail } from './taskDetail.js'
 import { registerIds, track } from './analytics.js'
-import { loadNotifyEmail, loadSessions, saveNotifyEmail, saveSessions } from './persist.js'
+import {
+  loadNotifyEmail, loadNotifyName, loadSessions,
+  saveNotifyEmail, saveNotifyName, saveSessions,
+} from './persist.js'
 import { isValidEmail, nextId } from './lib.js'
 import { startBuildTour, startIntroTour, tourRequested } from './tour.js'
 import {
@@ -78,9 +82,36 @@ export default function App() {
   const [scenarioStage, setScenarioStage] = useState(emptyScenarioStage())
   const [buildStage, setBuildStage] = useState({ stages: [], status: 'running', result: null, error: '' })
   const [pickedScenario, setPickedScenario] = useState('')
-  // Where to mail the finished task. Optional — an empty value builds silently.
-  // Seeded from localStorage so a returning recruiter doesn't retype it.
+  // Name + address for the finished task. REQUIRED to build — the task is the
+  // thing of value, and with no login this is the only way we know who is using
+  // it. Seeded from localStorage so a returning recruiter doesn't retype them.
   const [notifyEmail, setNotifyEmail] = useState(() => loadNotifyEmail())
+  const [notifyName, setNotifyName] = useState(() => loadNotifyName())
+  // Stack-aware instruction suggestions. Soft-fails to [] — the route returns
+  // 503 when its LLM call fails, and the static chips are the floor.
+  const [suggestions, setSuggestions] = useState([])
+  const [shareLabel, setShareLabel] = useState('')
+
+  // The most recent built task, if any. Drives the Share button, which must not
+  // offer to share before there is something to share.
+  const builtTask = [...messages].reverse().find((m) => m.kind === 'done')
+
+  async function onShare() {
+    const url = builtTask?.task_url || ''
+    const text = url
+      ? `${builtTask.task_name || 'Assessment task'} — ${url}`
+      : ''
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      setShareLabel('Copied ✓')
+    } catch {
+      // Clipboard is permission-gated and blocked on insecure origins; say so
+      // rather than appearing to have copied.
+      setShareLabel('Copy failed')
+    }
+    setTimeout(() => setShareLabel(''), 2000)
+  }
 
   // ---- refs (read inside async fetch / SSE callbacks) ----------------------
   const sessionIdRef = useRef(null)
@@ -174,6 +205,27 @@ export default function App() {
     if (!wizardOpen) return
     const w = mainRef.current?.querySelector('.wizard-inline')
     if (w) w.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [wizardOpen])
+
+  // Suggestions are per-brief, so fetch them when the wizard opens rather than
+  // on every chat turn. Failure is silent by design: the static chips remain.
+  useEffect(() => {
+    if (!wizardOpen) return
+    const brief = panelStateRef.current.brief || {}
+    const names = (brief.competencies || []).filter(Boolean)
+    if (!names.length) return
+    let dead = false
+    // Params are passed FLAT, not wrapped in { query } — checked against the
+    // generated signature. The route reads only `names` today; `proficiency` is
+    // in the client's param type but ignored server-side, so suggestions are not
+    // level-aware yet.
+    getTaskBuilderInstructionSuggestions({
+      names: names.join(','),
+      proficiency: brief.proficiency || '',
+    })
+      .then(({ data }) => !dead && setSuggestions(data?.suggestions || []))
+      .catch(() => {})
+    return () => { dead = true }
   }, [wizardOpen])
 
   // ---- brief panel ---------------------------------------------------------
@@ -367,12 +419,12 @@ export default function App() {
     const instr = composeInstructions()
     instructionsRef.current = instr
     selectedScenarioRef.current = pickedScenario
-    // Optional completion notification. The wizard already blocks Build on a
-    // malformed address, so this only guards against a value that slipped
-    // through — an invalid one would 400 the whole run, and losing the
-    // notification is a far better failure than losing the build.
+    // Name + email are required to reach Build, so this only guards a value
+    // that slipped through — a malformed address would 400 the whole run, and
+    // losing the notification is a far better failure than losing the build.
     const email = isValidEmail(notifyEmail) ? notifyEmail.trim() : ''
     saveNotifyEmail(email)
+    saveNotifyName((notifyName || '').trim())
     generatingRef.current = true
     setGenerating(true)
     setWizardStep('building')
@@ -623,6 +675,9 @@ export default function App() {
       <Header
         onNewTask={newTask}
         onDownloadPdf={downloadPdf}
+        onShare={onShare}
+        canShare={!!builtTask?.task_url}
+        shareLabel={shareLabel}
         showHistory={showHistory}
         onToggleHistory={() => setShowHistory((v) => !v)}
         showSkills={showSkills}
@@ -696,6 +751,15 @@ export default function App() {
             pickedScenario={pickedScenario}
             onPickScenario={setPickedScenario}
             notifyEmail={notifyEmail}
+            notifyName={notifyName}
+            onNotifyNameChange={setNotifyName}
+            suggestions={suggestions}
+            onUseSuggestion={(s) => {
+              // Append rather than replace: picking two suggestions should give
+              // both, and it must not wipe something already typed.
+              setInstructions((prev) => (prev.trim() ? `${prev.trim()}\n${s}` : s))
+              instructionsRef.current = instructions.trim() ? `${instructions.trim()}\n${s}` : s
+            }}
             onNotifyEmailChange={setNotifyEmail}
             onBuildTask={onBuildTask}
             buildStage={buildStage}

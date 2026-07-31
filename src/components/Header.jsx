@@ -5,6 +5,9 @@ export default function Header({
   onToggleHistory,
   showSkills,
   onToggleSkills,
+  onShare,
+  canShare,
+  shareLabel,
 }) {
   return (
     <header>
@@ -25,6 +28,13 @@ export default function Header({
       <div className="header-actions">
         <button className="hbtn" type="button" onClick={onNewTask}>
           New task
+        </button>
+        {/* Disabled until a task exists — a Share button that shares nothing is
+            worse than no button. Copies the task's repo link for now; the
+            product decision on a recruiter-style invite link is still open. */}
+        <button className="hbtn" type="button" onClick={onShare} disabled={!canShare}
+                title={canShare ? 'Copy a link to this task' : 'Build a task first'}>
+          {shareLabel || 'Share'}
         </button>
         <button className="hbtn" type="button" onClick={onDownloadPdf}>
           Download PDF
