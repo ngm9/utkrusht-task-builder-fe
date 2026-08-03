@@ -17,6 +17,32 @@ const API_BASE = env('VITE_API_BASE').replace(/\/+$/, '')
 /** Thrown on 401 so the page can ask for a token instead of showing an error. */
 export class TraceAuthError extends Error {}
 
+/** The sign-in config (OAuth client id). Public, no JWT — it is what the page
+ *  needs BEFORE it can authenticate anyone. */
+export async function getSignInConfig() {
+  const res = await fetch(`${API_BASE}/v2/task-builder/traces/session`)
+  if (!res.ok) throw new Error(`Could not read sign-in config (${res.status}).`)
+  return res.json()
+}
+
+/** Exchange a Google ID token for a trace session token.
+ *
+ *  The only POST here, and the only call that does NOT send a JWT — it is how
+ *  one is obtained. A 403 means the Google account is real but not an Utkrusht
+ *  team account, which is a different message to the user than "sign-in
+ *  failed", so the server's wording is passed through rather than replaced.
+ */
+export async function signInWithGoogle(credential) {
+  const res = await fetch(`${API_BASE}/v2/task-builder/traces/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.message || `Sign-in failed (${res.status}).`)
+  return body   // { token, email, expires_at }
+}
+
 async function get(path) {
   const jwt = getJwt()
   const res = await fetch(`${API_BASE}/v2/task-builder${path}`, {
@@ -31,7 +57,8 @@ async function get(path) {
   return res.json()
 }
 
-export const listTraces = (limit = 50) => get(`/traces?limit=${limit}`)
+export const listTraces = (limit = 50, { indexedOnly = false } = {}) =>
+  get(`/traces?limit=${limit}${indexedOnly ? '&indexed=1' : ''}`)
 export const getTrace = (runId) => get(`/traces/${encodeURIComponent(runId)}`)
 export const getTraceLog = (runId, name) =>
   get(`/traces/${encodeURIComponent(runId)}/logs/${name}`)

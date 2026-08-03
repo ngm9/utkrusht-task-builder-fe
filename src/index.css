@@ -114,11 +114,34 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 
 /* header panel toggles */
+/* Only the two header panel toggles. 30px with a 15px glyph read as an
+   afterthought next to the 16px title; the box and the glyph both go up so
+   they sit as deliberate controls rather than decoration. */
 .panel-toggle { background:none; border:1px solid transparent; color:var(--muted);
-  border-radius:6px; width:30px; height:30px; font-size:15px; cursor:pointer;
-  display:grid; place-items:center; flex:none; }
+  border-radius:7px; width:34px; height:34px; font-size:19px; cursor:pointer;
+  display:grid; place-items:center; flex:none; line-height:1; }
 .panel-toggle:hover { background:var(--bg); }
 .panel-toggle.on { color:var(--uk-green); }
+.panel-toggle { transition:background .15s ease, color .15s ease; }
+
+/* Hamburger -> cross. The two outer bars meet in the middle and rotate; the
+   middle one fades. Durations differ on purpose: the fade leads slightly so
+   the bar is gone before the others land on top of it, which is what stops
+   the midpoint looking like a smudge. */
+.burger { width:17px; height:13px; position:relative; display:block; }
+.burger span {
+  position:absolute; left:0; width:100%; height:1.75px; border-radius:2px;
+  background:currentColor;
+  transition:transform .24s cubic-bezier(.4,0,.2,1),
+             top .24s cubic-bezier(.4,0,.2,1),
+             opacity .12s ease;
+}
+.burger span:nth-child(1) { top:0; }
+.burger span:nth-child(2) { top:5.6px; }
+.burger span:nth-child(3) { top:11.2px; }
+.burger.open span:nth-child(1) { top:5.6px; transform:rotate(45deg); }
+.burger.open span:nth-child(2) { opacity:0; transform:scaleX(.4); }
+.burger.open span:nth-child(3) { top:5.6px; transform:rotate(-45deg); }
 
 /* ---- left panel: session history ------------------------------------------ */
 .side-new { background:none; border:1px solid var(--uk-green); color:var(--uk-green);
@@ -869,4 +892,61 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 @media (max-width:900px) {
   .trace-layout { grid-template-columns:minmax(0,1fr); }
   .trace-list { max-height:none; }
+}
+
+/* ── motion ───────────────────────────────────────────────────────────
+   Deliberately a short list. Animating everything makes an app feel slower,
+   not livelier — these are the places where movement carries meaning: state
+   that changed, something that arrived, something that responds to a hover.
+   Everything else stays still.
+
+   All of it is switched off under prefers-reduced-motion at the bottom of
+   this block. That is not optional politeness: for some people this kind of
+   movement causes actual nausea. */
+
+/* Hover/press feedback. 120-150ms is below the threshold where a transition
+   reads as "waiting" — it just makes the change feel physical. */
+.side-new, .hist-item, .hist-del, .chip, .task-share, .tr-btn, .tr-span,
+.wz-suggestion, .starters .chip {
+  transition: background .15s ease, border-color .15s ease, color .15s ease,
+              opacity .15s ease;
+}
+/* Buttons dip a hair on press — the cheapest way to make a click feel landed. */
+.cta:active, .hbtn:active, .side-new:active, .task-share:active,
+.request-card__send:active:not(:disabled) { transform: translateY(1px); }
+.cta, .hbtn, .side-new, .task-share, .request-card__send {
+  transition: background .15s ease, border-color .15s ease, color .15s ease,
+              transform .08s ease;
+}
+
+/* Chat messages arrive rather than appear. Small distance and a fast curve:
+   a long slide on every turn would be exhausting in a conversation. */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.row, .divider, .starters { animation: msg-in .22s cubic-bezier(.4,0,.2,1) both; }
+
+/* The brief card is re-rendered on every turn as slots fill. Animating the
+   WHOLE card each time would flash the panel constantly, so only the cell
+   that just changed gets marked. */
+.slots li { transition: background .2s ease, padding .16s ease, margin .16s ease; }
+
+/* Side panels: fade their contents in when a panel opens. The grid column
+   itself is not animated — transitioning grid-template-columns janks badly
+   at these widths, and a half-drawn panel is worse than an instant one. */
+@keyframes panel-in { from { opacity: 0 } to { opacity: 1 } }
+.side-left, .side-right { animation: panel-in .18s ease both; }
+
+/* Trace: rows stream in from S3 in one go, so animating each would fire
+   hundreds at once. Only the panes fade. */
+.tr-pane { animation: panel-in .18s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
