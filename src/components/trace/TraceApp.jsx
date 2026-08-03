@@ -24,6 +24,44 @@ import TraceSignIn from './TraceSignIn.jsx'
 import StageModal from './StageModal.jsx'
 
 const THEME_KEY = 'taskbuilder.trace.theme'
+
+// Stale-while-revalidate for the run list.
+//
+// sessionStorage, not localStorage: this is a debugging aid, and a list of runs
+// that outlives the tab would be shown to whoever opens it next on a shared
+// machine — the same reason the page needs a token in the first place. Per-tab
+// and gone on close is the right lifetime.
+//
+// The cached list is shown IMMEDIATELY and always revalidated behind it. It is
+// never the answer, only the first paint: a run listed here may have been
+// archived over, and the fresh list replaces it within a second.
+const RUNS_CACHE_KEY = 'taskbuilder.trace.runs.v1'
+
+function readCachedRuns() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(RUNS_CACHE_KEY) || 'null')
+    // Anything but a non-empty array is treated as no cache — a half-written or
+    // schema-changed entry must not render as an empty run list.
+    return Array.isArray(parsed) && parsed.length ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedRuns(runs) {
+  try {
+    if (Array.isArray(runs) && runs.length) {
+      sessionStorage.setItem(RUNS_CACHE_KEY, JSON.stringify(runs))
+    }
+  } catch {
+    // Quota or private mode. The cache is a nicety; losing it costs a slower
+    // first paint and nothing else.
+  }
+}
+
+function clearCachedRuns() {
+  try { sessionStorage.removeItem(RUNS_CACHE_KEY) } catch { /* ignore */ }
+}
 const asList = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v] : [])
 const runLabel = (r) => asList(r.competencies).join(', ') || String(r.run_id).slice(0, 12)
 
@@ -83,7 +121,10 @@ function deriveSpans(run) {
 
 export default function TraceApp() {
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark')
-  const [runs, setRuns] = useState(null)
+  // Seeded from the cache so the list is on screen before the first fetch
+  // resolves. `loadingRuns` starts false in that case — skeletons over a
+  // list we already have would be a downgrade, not a loading state.
+  const [runs, setRuns] = useState(readCachedRuns)
   const [runQuery, setRunQuery] = useState('')
   const [sel, setSel] = useState(null)
   const [run, setRun] = useState(null)
@@ -94,7 +135,8 @@ export default function TraceApp() {
   const [needsAuth, setNeedsAuth] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const [loadingRuns, setLoadingRuns] = useState(true)
+  const [loadingRuns, setLoadingRuns] = useState(() => readCachedRuns() === null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [openStage, setOpenStage] = useState(null)
 
   // log pane controls
@@ -107,19 +149,59 @@ export default function TraceApp() {
 
   useEffect(() => { localStorage.setItem(THEME_KEY, theme) }, [theme])
 
-  // Listing walks every run prefix in S3 and reads each manifest, so it takes
-  // seconds — it MUST report itself as busy or the page looks empty and broken
-  // for the whole wait.
+  // Two phases, because the two halves of this list cost wildly different
+  // amounts. Indexed runs come from one query; the rest need a bucket walk with
+  // a manifest read per run. Waiting for the slow half before showing anything
+  // meant staring at skeletons for seconds to reach a list whose top entries
+  // were ready almost immediately.
+  //
+  // So: a small first page paints, and the full list arrives behind it. The
+  // second call re-fetches the first twenty — deliberately, because a
+  // cursor-based fetch would need the walk to be resumable across day
+  // partitions, and duplicating twenty rows in the background is far cheaper
+  // than that machinery. Nobody is waiting on it.
+  const FIRST_PAGE = 20
+  const FULL_PAGE = 200
+
   const loadRuns = useCallback(async () => {
-    setErr(''); setNeedsAuth(false); setLoadingRuns(true)
+    setErr(''); setNeedsAuth(false); setLoadingMore(false)
+    // Only show skeletons when there is nothing to show instead.
+    const hadCache = readCachedRuns() !== null
+    if (!hadCache) setLoadingRuns(true)
+    let first
     try {
-      setRuns((await listTraces(100)).runs || [])
+      first = (await listTraces(FIRST_PAGE, { indexedOnly: true })).runs || []
+      setRuns(first)
     } catch (e) {
-      if (e instanceof TraceAuthError) setNeedsAuth(true)
+      if (e instanceof TraceAuthError) { setNeedsAuth(true); clearCachedRuns() }
       else setErr(String(e.message || e))
-      setRuns([])   // otherwise a failed load is indistinguishable from a slow one
+      // Keep a cached list on a transient failure — it is stale, not wrong, and
+      // better than an empty page. Only blank it when there was nothing cached.
+      if (!hadCache) setRuns([])
+      return
     } finally {
       setLoadingRuns(false)
+    }
+
+    // Phase 1 is index-only, so it is never the whole list — the walk still
+    // has to run for anything archived before the index existed.
+
+    setLoadingMore(true)
+    try {
+      const all = (await listTraces(FULL_PAGE)).runs || []
+      // Only replace if it is genuinely a superset; a smaller result means
+      // something went wrong upstream and the first page is the better answer.
+      if (all.length >= first.length) {
+        setRuns(all)
+        // Cache the FULL list, never the index-only first page — otherwise the
+        // next visit paints 14 runs and looks like the rest were lost.
+        writeCachedRuns(all)
+      }
+    } catch {
+      // Keep the first page. Failing to load OLDER runs is not worth taking
+      // away the ones already on screen.
+    } finally {
+      setLoadingMore(false)
     }
   }, [])
 
@@ -270,8 +352,10 @@ export default function TraceApp() {
           ))}
         </select>
         <button type="button" className="tr-btn" onClick={() => { loadRuns(); if (sel) loadRun(sel) }}>↻</button>
-        <span className={`tr-conn ${busy || loadingRuns ? '' : 'live'}`}>
-          {loadingRuns ? 'loading runs' : busy ? 'loading run' : 'idle'}
+        <span className={`tr-conn ${busy || loadingRuns || loadingMore ? '' : 'live'}`}>
+          {loadingRuns ? 'loading runs'
+            : busy ? 'loading run'
+              : loadingMore ? 'loading older' : 'idle'}
         </span>
         <div className="tr-totals">
           <span>calls <b>{totals.calls}</b></span>
@@ -303,6 +387,11 @@ export default function TraceApp() {
             {!sel && !loadingRuns && !visibleRuns.length && (
               <div className="tr-empty">
                 {runQuery ? 'No runs match that search.' : 'No archived runs yet.'}
+              </div>
+            )}
+            {!sel && !loadingRuns && loadingMore && (
+              <div className="tr-empty tr-pulse" style={{ fontSize: 11 }}>
+                loading older runs…
               </div>
             )}
             {!sel && !loadingRuns && visibleRuns.map((r) => (

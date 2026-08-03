@@ -57,7 +57,8 @@ async function get(path) {
   return res.json()
 }
 
-export const listTraces = (limit = 50) => get(`/traces?limit=${limit}`)
+export const listTraces = (limit = 50, { indexedOnly = false } = {}) =>
+  get(`/traces?limit=${limit}${indexedOnly ? '&indexed=1' : ''}`)
 export const getTrace = (runId) => get(`/traces/${encodeURIComponent(runId)}`)
 export const getTraceLog = (runId, name) =>
   get(`/traces/${encodeURIComponent(runId)}/logs/${name}`)

@@ -70,7 +70,6 @@ export default function App() {
   // side panels
   const [sessions, setSessions] = useState(() => loadSessions())
   const [viewingId, setViewingId] = useState(null) // non-null ⇒ browsing an archived session read-only
-  const [showHistory, setShowHistory] = useState(true)
   const [showSkills, setShowSkills] = useState(true)
   const liveMessagesRef = useRef(null) // stashes the live chat while viewing an archived session
 
@@ -672,8 +671,6 @@ export default function App() {
   return (
     <>
       <Header
-        showHistory={showHistory}
-        onToggleHistory={() => setShowHistory((v) => !v)}
         showSkills={showSkills}
         onToggleSkills={() => setShowSkills((v) => !v)}
       />
@@ -681,17 +678,15 @@ export default function App() {
         Utkrusht Task Builder — <span id="print-date">{printDate}</span>
       </div>
 
-      <div className={`layout${showHistory ? ' with-left' : ''}${showSkills ? ' with-right' : ''}`}>
-        {showHistory && (
-          <HistoryPanel
-            sessions={sessions}
-            currentId={sessionId}
-            viewingId={viewingId}
-            onOpen={openSession}
-            onDelete={deleteSession}
-            onNew={newTask}
-          />
-        )}
+      <div className={`layout with-left${showSkills ? ' with-right' : ''}`}>
+        <HistoryPanel
+          sessions={sessions}
+          currentId={sessionId}
+          viewingId={viewingId}
+          onOpen={openSession}
+          onDelete={deleteSession}
+          onNew={newTask}
+        />
 
         <main ref={mainRef}>
           {viewingId && (
