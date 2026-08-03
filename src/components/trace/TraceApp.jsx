@@ -20,6 +20,7 @@ import {
 import { getJwt, promptForJwt } from '../../auth.js'
 import { LEVELS, parseLog, rowMatches, stageHue, stageOfLog } from './logModel.js'
 import LlmCall from './LlmCall.jsx'
+import TraceSignIn from './TraceSignIn.jsx'
 import StageModal from './StageModal.jsx'
 
 const THEME_KEY = 'taskbuilder.trace.theme'
@@ -233,12 +234,20 @@ export default function TraceApp() {
   if (needsAuth) {
     return (
       <div className="trace-root" data-theme={theme}>
-        <div className="tr-empty" style={{ padding: 30 }}>
-          <h1 style={{ fontSize: 15 }}>Pipeline traces</h1>
-          <p>Testmaker-only — this shows full run logs and LLM prompts.</p>
-          <button type="button" className="tr-btn"
-                  onClick={() => { if (promptForJwt()) loadRuns() }}>
-            {getJwt() ? 'Re-enter token' : 'Enter testmaker token'}
+        <div className="tr-signin">
+          <h1>Pipeline traces</h1>
+          <p>
+            Utkrusht team only — this page shows full run logs and the LLM
+            prompts behind every generated task.
+          </p>
+          <TraceSignIn onSignedIn={() => { setNeedsAuth(false); loadRuns() }} />
+          {/* Kept as a fallback, not the headline: Google verifies WHO you are,
+              a pasted token only proves someone could sign one. Still needed
+              when GIS cannot load, or on an origin not registered with the
+              OAuth client. */}
+          <button type="button" className="tr-signin-alt"
+                  onClick={() => { if (promptForJwt()) { setNeedsAuth(false); loadRuns() } }}>
+            {getJwt() ? 'Use a different token' : 'Paste a testmaker token instead'}
           </button>
         </div>
       </div>
