@@ -450,6 +450,7 @@ export default function App() {
       selected_scenario: selectedScenarioRef.current,
       scenarios_prepared: scenariosPreparedRef.current,
       notify_email: email,
+      notify_name: (notifyName || '').trim(),
     })
       .then(({ data }) => pollBuild(data.job_id))
       .catch(() => {
