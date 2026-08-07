@@ -32,8 +32,6 @@ function SkillsPanelIcon({ on }) {
 export default function Header({ showSkills, onToggleSkills }) {
   return (
     <header>
-      <img className="logo" src="/utkrusht-logo.png" alt="Utkrusht" />
-      <span className="header-sep" aria-hidden="true"></span>
       <h1>
         Task <span className="shimmer">Builder</span>
       </h1>

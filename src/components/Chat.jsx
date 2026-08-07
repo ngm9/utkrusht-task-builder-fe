@@ -11,7 +11,7 @@ import RequestCard from './RequestCard.jsx'
 function Row({ role, cls, children }) {
   const avatar = (
     <div className={`avatar ${role}`}>
-      {role === 'user' ? 'Y' : <img src="/favicon.png" alt="Utkrusht" />}
+      {role === 'user' ? 'Y' : <img src="/favicon.png" alt="Task Builder" />}
     </div>
   )
   const bubble = <div className={`bubble ${cls || ''}`}>{children}</div>
