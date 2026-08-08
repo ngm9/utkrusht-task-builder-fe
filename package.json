@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Frontend for the Utkrusht Task Builder — conversational task generator UI.",
+  "description": "Frontend for the Task Builder — conversational task generator UI.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

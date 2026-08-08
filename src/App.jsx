@@ -43,6 +43,17 @@ const EMPTY_PANEL = { brief: {}, missing: [], ready: false }
 const PREPARED_STAGES = ['00_preflight', '01_input_files', '02_scenarios']
 const emptyScenarioStage = () => ({ mode: 'prep', prepStages: [], list: [], error: '' })
 
+// /scenarios returns EVERY scenario generated for the session — one batch per
+// prepare run, so three runs give you 18 near-identical cards to arrow through.
+// Five is enough to choose from; past that people stop reading and pick the
+// first one anyway. Capped here rather than at the carousel because that
+// component resets to card 1 whenever the list's identity changes, and slicing
+// during render would hand it a fresh array every time.
+// ponytail: pool size is really the backend's call — drop this once /scenarios
+// returns a bounded, deduped list.
+const MAX_SCENARIOS = 5
+const topScenarios = (data) => ((data && data.scenarios) || []).slice(0, MAX_SCENARIOS)
+
 // The brief is generation-ready once every REQUIRED slot is filled — this is
 // exactly what the backend's /api/generate gates on (brief.is_complete()). We
 // deliberately do NOT wait for the bot's `ready` confirmation flag: it stays
@@ -358,7 +369,7 @@ export default function App() {
     })
     getTaskBuilderScenarios(sessionIdRef.current)
       .then(({ data }) => {
-        const pool = (data && data.scenarios) || []
+        const pool = topScenarios(data)
         if (pool.length) {
           scenariosPreparedRef.current = true
           setScenarioStage((prev) => ({ ...prev, mode: 'list', list: pool }))
@@ -396,7 +407,7 @@ export default function App() {
           if (st === 'done') {
             scenariosPreparedRef.current = true
             getTaskBuilderScenarios(sessionIdRef.current)
-              .then(({ data: d }) => setScenarioStage((prev) => ({ ...prev, mode: 'list', list: (d && d.scenarios) || [] })))
+              .then(({ data: d }) => setScenarioStage((prev) => ({ ...prev, mode: 'list', list: topScenarios(d) })))
               .catch(() =>
                 setScenarioStage((prev) => ({
                   ...prev,
@@ -675,7 +686,7 @@ export default function App() {
         onToggleSkills={() => setShowSkills((v) => !v)}
       />
       <div className="print-head" aria-hidden="true">
-        Utkrusht Task Builder — <span id="print-date">{printDate}</span>
+        Task Builder — <span id="print-date">{printDate}</span>
       </div>
 
       <div className={`layout with-left${showSkills ? ' with-right' : ''}`}>

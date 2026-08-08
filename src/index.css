@@ -53,8 +53,6 @@ header {
   background:var(--card);
   display:flex; align-items:center; gap:10px;
 }
-.logo { height:24px; width:auto; display:block; }
-.header-sep { width:1px; height:20px; background:var(--border); margin:0 2px; }
 header h1 {
   font-size:16px; margin:0; font-weight:700; letter-spacing:-0.02em;
 }
@@ -601,6 +599,13 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 /* Completion-email field — sits directly above the Build action, since it is
    about what happens AFTER you click it. Borrows .instructions' input idiom. */
 .wz-notify { gap:6px; }
+/* A full sentence, so it drops the uppercase micro-label treatment the other
+   group labels use — 11px caps is legible for "TASK SHAPE & FOCUS" and a wall
+   for anything longer. */
+.wz-notify .wz-group-label { font-size:13px; font-weight:600; letter-spacing:0;
+  text-transform:none; color:var(--text); line-height:1.45; }
+.wz-notify-lede { font-size:12px; color:var(--muted); line-height:1.5;
+  margin-bottom:3px; }
 .wz-email { width:100%; font:inherit; font-size:13px;
   color:var(--text); background:var(--card); border:0.5px solid var(--border);
   border-radius:8px; padding:9px 10px; line-height:1.5; }

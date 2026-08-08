@@ -289,19 +289,27 @@ export default function GenerateWizard({
                 visitor — and it is the only way we know who is using a product
                 with no login. It also earns its keep for the user, since a run
                 takes minutes and we can mail the result.
-                First name only, not full name. */}
+                The label frames it as what it is — we host and run the task, so
+                we need somewhere to send it — rather than as a gate you pay to
+                pass. "Unlock your task" read like a paywall on work the user
+                had already done. */}
             <div className="wz-group wz-notify">
               <div className="wz-group-label">
-                Enter your name and email to unlock your task
+                We’ll deploy and run this task on our infrastructure
+              </div>
+              <div className="wz-notify-lede">
+                We just need your email so we can tell you when it’s ready to send to
+                candidates.
               </div>
               <input
                 className="wz-email"
                 type="text"
-                autoComplete="given-name"
+                autoComplete="name"
                 spellCheck="false"
                 value={notifyName || ''}
                 onChange={(e) => onNotifyNameChange(e.target.value)}
-                placeholder="First name"
+                placeholder="Name"
+                aria-label="Name"
               />
               <input
                 className={`wz-email${emailInvalid ? ' invalid' : ''}`}
@@ -311,7 +319,8 @@ export default function GenerateWizard({
                 spellCheck="false"
                 value={notifyEmail || ''}
                 onChange={(e) => onNotifyEmailChange(e.target.value)}
-                placeholder="you@company.com"
+                placeholder="Email"
+                aria-label="Email"
                 aria-invalid={emailInvalid}
                 aria-describedby="wz-email-hint"
               />
