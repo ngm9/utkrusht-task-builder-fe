@@ -440,8 +440,12 @@ export default function App() {
     // that slipped through — a malformed address would 400 the whole run, and
     // losing the notification is a far better failure than losing the build.
     const email = isValidEmail(notifyEmail) ? notifyEmail.trim() : ''
+    // Same forgiving treatment the address gets: the name is cosmetic (it
+    // greets the recruiter in the completion mail and labels the build in
+    // #task-notifications), so it must never be the reason a build fails.
+    const name = (notifyName || '').trim()
     saveNotifyEmail(email)
-    saveNotifyName((notifyName || '').trim())
+    saveNotifyName(name)
     generatingRef.current = true
     setGenerating(true)
     setWizardStep('building')
@@ -461,6 +465,7 @@ export default function App() {
       selected_scenario: selectedScenarioRef.current,
       scenarios_prepared: scenariosPreparedRef.current,
       notify_email: email,
+      notify_name: name,
     })
       .then(({ data }) => pollBuild(data.job_id))
       .catch(() => {
