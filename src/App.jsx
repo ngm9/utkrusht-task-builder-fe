@@ -7,6 +7,7 @@ import {
   generateTaskBuilderRun,
   getTaskBuilderRun,
   getTaskBuilderInstructionSuggestions,
+  getTaskBuilderSession,
 } from './client.js'
 import { fetchTaskDetail } from './taskDetail.js'
 import { registerIds, track } from './analytics.js'
@@ -65,6 +66,17 @@ function isBriefComplete(brief) {
     const v = brief[d.key]
     return d.list ? Array.isArray(v) && v.length > 0 : v != null && String(v).trim() !== ''
   })
+}
+
+// A stage's log is a string, but a worker mid-rollout can still be writing the
+// richer {text, pct} shape (or a future one). React throws "Objects are not
+// valid as a React child" and white-screens the whole page on anything else, so
+// coerce at the boundary — a progress panel must never be able to take the app
+// down over a payload shape.
+function asText(log) {
+  if (typeof log === 'string') return log
+  if (log && typeof log === 'object') return log.text || ''
+  return ''
 }
 
 export default function App() {
@@ -400,7 +412,7 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const prep = PREP_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '' }
+            return { key, label, status: s.status || 'pending', log: asText(s.log), progress: typeof s.progress === 'number' ? s.progress : null }
           })
           setScenarioStage((prev) => ({ ...prev, prepStages: prep }))
           const st = data.status
@@ -487,7 +499,7 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const stages = PIPELINE_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '' }
+            return { key, label, status: s.status || 'pending', log: asText(s.log), progress: typeof s.progress === 'number' ? s.progress : null }
           })
           setBuildStage((prev) => ({ ...prev, stages }))
           const st = data.status
@@ -541,6 +553,42 @@ export default function App() {
     })
   }
 
+  // A finished run belongs in the transcript whether or not the user was still
+  // watching. The done-card is written by finishBuild() — i.e. only when they
+  // click Done — so a refresh (or a closed tab, which the wizard explicitly
+  // invites: "we'll email you, you can close this tab") lost every trace of a
+  // task that was successfully created. The job row is the source of truth, not
+  // whether a button was pressed, so reconcile the transcript against it.
+  const reconciledRef = useRef(new Set())
+  function reconcileRuns(conversationId) {
+    if (!conversationId || reconciledRef.current.has(conversationId)) return
+    reconciledRef.current.add(conversationId)
+    getTaskBuilderSession(conversationId)
+      .then(({ data }) => {
+        const finished = (data?.jobs || []).filter(
+          (j) => j.status === 'done' && j.result_task_id)
+        if (!finished.length) return
+        setMessages((prev) => {
+          const known = new Set(
+            prev.filter((m) => m.kind === 'done' && m.task_id).map((m) => m.task_id))
+          const missing = finished.filter((j) => !known.has(j.result_task_id))
+          if (!missing.length) return prev
+          // task_id only — DoneCard's existing hydration turns each into the
+          // full detail card, so this path needs no second fetch of its own.
+          return [...prev, ...missing.map((j) => ({
+            id: nextId(), kind: 'done', status: 'completed',
+            task_id: j.result_task_id,
+          }))]
+        })
+      })
+      .catch(() => { /* offline or an older backend — the transcript stands */ })
+  }
+
+  // Reconcile the live session on mount and whenever it changes.
+  useEffect(() => {
+    if (sessionId && !viewingId) reconcileRuns(sessionId)
+  }, [sessionId, viewingId])
+
   // Record the outcome in the chat transcript, then close the wizard.
   function finishBuild() {
     if (buildStage.status === 'done') {
@@ -575,6 +623,9 @@ export default function App() {
     setShowStarters(false)
     setWizardOpen(false)
     setMessages((s.messages || []).map((m) => ({ ...m, id: m.id ?? nextId() })))
+    // Same reconciliation for an archived session: it was saved from the same
+    // transcript, so it lost the same cards.
+    reconcileRuns(s.id)
   }
   function deleteSession(id) {
     setSessions((prev) => {
@@ -742,6 +793,7 @@ export default function App() {
           {/* The wizard renders BELOW the conversation so it appears down the
               page (where the user clicked Generate), not at the top. */}
           <GenerateWizard
+            conversationId={sessionId}
             open={wizardOpen}
             step={wizardStep}
             subtitle={wizardSubtitle}

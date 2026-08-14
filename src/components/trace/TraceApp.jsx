@@ -65,6 +65,43 @@ function clearCachedRuns() {
 const asList = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v] : [])
 const runLabel = (r) => asList(r.competencies).join(', ') || String(r.run_id).slice(0, 12)
 
+// One BUILD is two jobs by design — prepare (stages 00-02) and generate
+// (03-04) are separate `generation_jobs` rows so the second can find the
+// first's input files after a redeploy. The viewer listed them as two
+// unrelated runs, one of which (prepare, which writes no manifest) rendered as
+// `— · — · unknown` beside its own other half.
+//
+// The conversation is what makes them one build: it is what the person did,
+// retries included. Grouped newest-first, each group labelled by whichever of
+// its runs actually knows the stack.
+// Which half of the build this run is. A run that produced (or tried to
+// produce) a task ran generate; anything else got as far as prepare.
+const stageSpanLabel = (r) =>
+  r.task_id || (r.outcome && r.outcome !== 'prepared') ? 'generate' : 'prepare'
+
+function groupByConversation(runs) {
+  const groups = []
+  const byConv = new Map()
+  for (const r of runs) {
+    const key = r.conversation_id
+    if (!key) { groups.push({ key: r.run_id, runs: [r] }); continue }
+    let g = byConv.get(key)
+    if (!g) { g = { key, runs: [] }; byConv.set(key, g); groups.push(g) }
+    g.runs.push(r)
+  }
+  return groups
+}
+
+// The label a whole build shows: the first run that knows its stack wins, since
+// a prepare run archived without a manifest knows nothing about itself.
+const groupLabel = (g) =>
+  asList(g.runs.find((r) => asList(r.competencies).length)?.competencies).join(', ') ||
+  String(g.runs[0].run_id).slice(0, 12)
+
+// A build's verdict is its LAST run's — generate decides the outcome, prepare
+// only ever gets that far.
+const groupOutcome = (g) => g.runs[g.runs.length - 1].outcome || g.runs[0].outcome || '?'
+
 const bareStage = (n) => String(n).replace(/^\d+_/, '')
 const secs = (ms) => (ms == null ? '' : ms < 1000 ? `${ms}ms` : `${Math.round(ms / 1000)}s`)
 
@@ -345,10 +382,21 @@ export default function TraceApp() {
                onChange={(e) => setRunQuery(e.target.value)} />
         <select className="tr-picker" value={sel || ''} onChange={(e) => setSel(e.target.value)}>
           <option value="">pick a run…</option>
-          {visibleRuns.map((r) => (
-            <option key={r.run_id} value={r.run_id}>
-              {r.day} · {runLabel(r)} · {r.outcome || '?'}
-            </option>
+          {groupByConversation(visibleRuns).map((g) => (
+            g.runs.length === 1 ? (
+              <option key={g.runs[0].run_id} value={g.runs[0].run_id}>
+                {g.runs[0].day} · {runLabel(g.runs[0])} · {g.runs[0].outcome || '?'}
+              </option>
+            ) : (
+              <optgroup key={g.key}
+                        label={`${g.runs[0].day} · ${groupLabel(g)} · ${groupOutcome(g)}`}>
+                {g.runs.map((r) => (
+                  <option key={r.run_id} value={r.run_id}>
+                    {'   '}{stageSpanLabel(r)} · {r.outcome || 'prepared'}
+                  </option>
+                ))}
+              </optgroup>
+            )
           ))}
         </select>
         <button type="button" className="tr-btn" onClick={() => { loadRuns(); if (sel) loadRun(sel) }}>↻</button>

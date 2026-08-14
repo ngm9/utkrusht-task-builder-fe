@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import RequestCard from './RequestCard.jsx'
 import { SERVICE_CHIPS, SHAPE_CHIPS } from '../constants.js'
 import { isValidEmail, parseScenario } from '../lib.js'
 import TaskDetailCard from './TaskDetailCard.jsx'
@@ -44,10 +45,21 @@ function PrepProgress({ prepStages, showLogs = true }) {
           <div className="prep-stage-head">
             <StageDot status={s.status} />
             <span>{s.label}</span>
+            {/* Per-stage percent from the backend's curated milestones — the
+                server decides progress, the client only draws it. */}
+            {typeof s.progress === 'number' && s.status === 'running' ? (
+              <span className="prep-stage-pct">{s.progress}%</span>
+            ) : null}
           </div>
+          {typeof s.progress === 'number' && s.status === 'running' ? (
+            <div className="prep-stage-bar" role="progressbar"
+                 aria-valuenow={s.progress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="prep-stage-bar-fill" style={{ width: `${s.progress}%` }} />
+            </div>
+          ) : null}
           {showLogs && s.log ? (
             <details className="prep-stage-log" open={s.status === 'running'}>
-              <summary>logs</summary>
+              <summary>activity</summary>
               <pre>{s.log}</pre>
             </details>
           ) : null}
@@ -145,6 +157,7 @@ export default function GenerateWizard({
   buildStage, // { stages, status: 'running'|'done'|'failed', result, error }
   onBuildDone,
   onClose,
+  conversationId,
 }) {
   if (!open) return null
   // Optional field: empty is fine, but a half-typed address must not start a
@@ -384,7 +397,19 @@ export default function GenerateWizard({
                 </div>
               ))}
             {buildStage.status === 'failed' && (
-              <div className="scenario-empty">{buildStage.error}</div>
+              <>
+                <div className="scenario-empty">{buildStage.error}</div>
+                {/* A missing runtime is the one failure the recruiter can
+                    actually resolve — by asking us to add it. The same request
+                    form the chat uses for its dead-ends, so the ask lands in
+                    task_builder_requests and Discord instead of evaporating. */}
+                {/runtime|infrastructure/i.test(buildStage.error || '') && conversationId ? (
+                  <RequestCard
+                    m={{ kind_: 'runtime_template', subject: subtitle || 'this stack' }}
+                    conversationId={conversationId}
+                  />
+                ) : null}
+              </>
             )}
 
             <div className="wz-actions">

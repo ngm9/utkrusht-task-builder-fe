@@ -29,12 +29,17 @@ function toPoints(text) {
     .filter(Boolean)
 }
 
-/** The link worth sharing: the task's own repository, falling back to the
- *  starter-code gist. Returns '' when neither exists, which is the signal not
- *  to render the Share control at all. */
+/** The link that is safe to hand out: the starter-code gist.
+ *
+ *  Deliberately NOT `github_repo`. That is the private UtkrushtApps repo — it
+ *  holds the reference solution and the grading set — so "Share assessment"
+ *  was putting a link on the clipboard that 404s for the recruiter who copies
+ *  it and must never reach a candidate. Returns '' when there is no gist,
+ *  which is the signal not to render the Share control at all: no link beats
+ *  the wrong link. */
 export function shareableUrl(task) {
   const res = (task && task.resources) || {}
-  return res.github_repo || res.github_gist || ''
+  return res.github_gist || ''
 }
 
 export default function TaskDetailCard({ task, onShare, shareLabel }) {
@@ -86,6 +91,11 @@ export default function TaskDetailCard({ task, onShare, shareLabel }) {
         </div>
       )}
 
+      {/* No repository link here on purpose. `github_repo` is the PRIVATE
+          UtkrushtApps repo — it holds the reference solution and the grading
+          set, and only we can open it. Rendering it would show every recruiter
+          a link that 404s for them and must never reach a candidate. The gist
+          is the starter code, which is the thing a candidate is meant to get. */}
       {(res.github_gist || datasets.length > 0) && (
         <div className="task-detail-links">
           {res.github_gist && (
