@@ -44,10 +44,21 @@ function PrepProgress({ prepStages, showLogs = true }) {
           <div className="prep-stage-head">
             <StageDot status={s.status} />
             <span>{s.label}</span>
+            {/* Per-stage percent from the backend's curated milestones — the
+                server decides progress, the client only draws it. */}
+            {typeof s.progress === 'number' && s.status === 'running' ? (
+              <span className="prep-stage-pct">{s.progress}%</span>
+            ) : null}
           </div>
+          {typeof s.progress === 'number' && s.status === 'running' ? (
+            <div className="prep-stage-bar" role="progressbar"
+                 aria-valuenow={s.progress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="prep-stage-bar-fill" style={{ width: `${s.progress}%` }} />
+            </div>
+          ) : null}
           {showLogs && s.log ? (
             <details className="prep-stage-log" open={s.status === 'running'}>
-              <summary>logs</summary>
+              <summary>activity</summary>
               <pre>{s.log}</pre>
             </details>
           ) : null}

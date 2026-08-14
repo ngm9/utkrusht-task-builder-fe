@@ -400,7 +400,7 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const prep = PREP_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '' }
+            return { key, label, status: s.status || 'pending', log: s.log || '', progress: typeof s.progress === 'number' ? s.progress : null }
           })
           setScenarioStage((prev) => ({ ...prev, prepStages: prep }))
           const st = data.status
@@ -487,7 +487,7 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const stages = PIPELINE_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '' }
+            return { key, label, status: s.status || 'pending', log: s.log || '', progress: typeof s.progress === 'number' ? s.progress : null }
           })
           setBuildStage((prev) => ({ ...prev, stages }))
           const st = data.status
