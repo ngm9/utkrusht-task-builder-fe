@@ -9,6 +9,8 @@
 // anon key in the build is the dev project's.
 import { env } from './runtime-env.js'
 
+const API_BASE = env('VITE_API_BASE').replace(/\/+$/, '')
+
 const SB_URL = env('VITE_SUPABASE_URL').replace(/\/+$/, '')
 const SB_KEY = env('VITE_SUPABASE_ANON_KEY').trim()
 
@@ -68,8 +70,23 @@ function transformRow(row) {
 
 export async function fetchTaskDetail(taskId) {
   try {
-    const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`)
-    if (res.ok) return await res.json()
+    // `/v2/task-builder/tasks/<id>` — the route that actually exists, through
+    // API_BASE like every other call. The old path was a bare `/api/tasks/<id>`,
+    // which nothing routes to the backend: the dev server proxies only `/v2/*`
+    // and a deployed FE serves its own origin, so the request returned
+    // **index.html with status 200**. `res.ok` was therefore true, `res.json()`
+    // threw on the HTML, and the throw was swallowed by the catch below — so a
+    // reloaded transcript silently degraded to the bare-task-id card while the
+    // detail sat one working endpoint away.
+    const res = await fetch(
+      `${API_BASE}/v2/task-builder/tasks/${encodeURIComponent(taskId)}`,
+      { headers: { Accept: 'application/json' } },
+    )
+    // A 200 is not enough: an SPA fallback answers 200 with HTML. Require the
+    // server to say it is JSON before trusting the body.
+    if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+      return await res.json()
+    }
   } catch {
     /* fall through to the Supabase fallback */
   }
