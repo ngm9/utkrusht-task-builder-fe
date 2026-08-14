@@ -67,6 +67,17 @@ function isBriefComplete(brief) {
   })
 }
 
+// A stage's log is a string, but a worker mid-rollout can still be writing the
+// richer {text, pct} shape (or a future one). React throws "Objects are not
+// valid as a React child" and white-screens the whole page on anything else, so
+// coerce at the boundary — a progress panel must never be able to take the app
+// down over a payload shape.
+function asText(log) {
+  if (typeof log === 'string') return log
+  if (log && typeof log === 'object') return log.text || ''
+  return ''
+}
+
 export default function App() {
   // ---- render state --------------------------------------------------------
   const [messages, setMessages] = useState([])
@@ -400,7 +411,7 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const prep = PREP_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '', progress: typeof s.progress === 'number' ? s.progress : null }
+            return { key, label, status: s.status || 'pending', log: asText(s.log), progress: typeof s.progress === 'number' ? s.progress : null }
           })
           setScenarioStage((prev) => ({ ...prev, prepStages: prep }))
           const st = data.status
@@ -487,7 +498,7 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const stages = PIPELINE_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '', progress: typeof s.progress === 'number' ? s.progress : null }
+            return { key, label, status: s.status || 'pending', log: asText(s.log), progress: typeof s.progress === 'number' ? s.progress : null }
           })
           setBuildStage((prev) => ({ ...prev, stages }))
           const st = data.status
