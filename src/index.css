@@ -717,13 +717,16 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .request-card__title { font-weight:600; color:var(--uk-green-deep); }
 .request-card__prompt { margin:0; color:var(--muted); font-size:13.5px; }
 .request-card__note,
+.request-card__name,
 .request-card__email {
   width:100%; padding:9px 11px; border:1px solid var(--border);
   border-radius:8px; background:var(--card); color:var(--text);
   font:inherit; font-size:14px;
 }
 .request-card__note { resize:vertical; min-height:64px; }
-.request-card__note:focus, .request-card__email:focus {
+.request-card__note:focus,
+.request-card__name:focus,
+.request-card__email:focus {
   outline:none; border-color:var(--uk-green-mid);
 }
 .request-card__send {

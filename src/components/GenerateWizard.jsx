@@ -368,7 +368,11 @@ export default function GenerateWizard({
               </div>
             ) : null}
 
-            <PrepProgress prepStages={buildStage.stages} showLogs={false} />
+            {/* Same live-log expanders the prep step gets — the poll already
+                maps every stage's log tail, so hiding them here made the two
+                longest stages (Prompts, Generate & evaluate) a silent spinner
+                for 5-10 minutes. */}
+            <PrepProgress prepStages={buildStage.stages} showLogs />
 
             {buildStage.status === 'done' &&
               (buildStage.result?.details ? (

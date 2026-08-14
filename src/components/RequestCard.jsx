@@ -11,6 +11,7 @@
 // add your email, send.
 import { useState } from 'react'
 import { createTaskBuilderRequest } from '../client.js'
+import { loadNotifyName, saveNotifyName } from '../persist.js'
 
 // What to ask for, per dead-end. Generic enough that an unknown kind still
 // renders something sensible rather than an empty prompt.
@@ -25,6 +26,9 @@ const PROMPTS = {
 export default function RequestCard({ m, conversationId }) {
   const request = { kind: m.kind_, subject: m.subject || '' }
   const [email, setEmail] = useState('')
+  // Prefilled from the same store the Build form writes, so someone who already
+  // told us their name once does not retype it here.
+  const [name, setName] = useState(() => loadNotifyName())
   const [note, setNote] = useState(
     request.subject ? `We need ${request.subject}. ` : '')
   const [state, setState] = useState('idle') // idle | sending | sent | error
@@ -32,12 +36,17 @@ export default function RequestCard({ m, conversationId }) {
   async function submit(e) {
     e.preventDefault()
     setState('sending')
+    const trimmedName = name.trim()
     try {
       await createTaskBuilderRequest(conversationId, {
         ...request,
         email: email.trim(),
+        name: trimmedName,
         message: note.trim(),
       })
+      // Only after the send succeeds: remembering a name from a request that
+      // never landed would prefill the Build form from a failure.
+      saveNotifyName(trimmedName)
       setState('sent')
     } catch {
       setState('error')
@@ -53,8 +62,9 @@ export default function RequestCard({ m, conversationId }) {
     )
   }
 
-  // Both fields required: a note without an address is unactionable, and an
-  // address without a note tells the team nothing.
+  // Note and address required; the name is NOT. Those two are what make a
+  // request actionable — a name only makes the reply friendlier, and every
+  // extra mandatory field is another reason to abandon the form.
   const disabled = state === 'sending' || !email.trim() || !note.trim()
 
   return (
@@ -70,6 +80,14 @@ export default function RequestCard({ m, conversationId }) {
         rows={3}
         placeholder="A sentence or two is plenty."
         onChange={(ev) => setNote(ev.target.value)}
+      />
+      <input
+        className="request-card__name"
+        type="text"
+        value={name}
+        maxLength={100}
+        placeholder="Your name (optional)"
+        onChange={(ev) => setName(ev.target.value)}
       />
       <input
         className="request-card__email"
