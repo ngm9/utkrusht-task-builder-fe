@@ -86,8 +86,18 @@ export default function TaskDetailCard({ task, onShare, shareLabel }) {
         </div>
       )}
 
-      {(res.github_gist || datasets.length > 0) && (
+      {(res.github_repo || res.github_gist || datasets.length > 0) && (
         <div className="task-detail-links">
+          {/* The repository is the thing the recruiter actually hands to a
+              candidate, and it was reachable only through the Share control —
+              a task whose only resource is its repo (the common case) rendered
+              no link at all, so the card looked like it had lost the repo. */}
+          {res.github_repo && (
+            <a href={res.github_repo} target="_blank" rel="noopener noreferrer" className="res-btn">
+              <GithubIcon />
+              <span>View repository</span>
+            </a>
+          )}
           {res.github_gist && (
             <a href={res.github_gist} target="_blank" rel="noopener noreferrer" className="res-btn">
               <GithubIcon />
