@@ -753,6 +753,7 @@ export default function App() {
           {/* The wizard renders BELOW the conversation so it appears down the
               page (where the user clicked Generate), not at the top. */}
           <GenerateWizard
+            conversationId={sessionId}
             open={wizardOpen}
             step={wizardStep}
             subtitle={wizardSubtitle}
