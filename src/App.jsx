@@ -7,6 +7,7 @@ import {
   generateTaskBuilderRun,
   getTaskBuilderRun,
   getTaskBuilderInstructionSuggestions,
+  getTaskBuilderSession,
 } from './client.js'
 import { fetchTaskDetail } from './taskDetail.js'
 import { registerIds, track } from './analytics.js'
@@ -552,6 +553,42 @@ export default function App() {
     })
   }
 
+  // A finished run belongs in the transcript whether or not the user was still
+  // watching. The done-card is written by finishBuild() — i.e. only when they
+  // click Done — so a refresh (or a closed tab, which the wizard explicitly
+  // invites: "we'll email you, you can close this tab") lost every trace of a
+  // task that was successfully created. The job row is the source of truth, not
+  // whether a button was pressed, so reconcile the transcript against it.
+  const reconciledRef = useRef(new Set())
+  function reconcileRuns(conversationId) {
+    if (!conversationId || reconciledRef.current.has(conversationId)) return
+    reconciledRef.current.add(conversationId)
+    getTaskBuilderSession(conversationId)
+      .then(({ data }) => {
+        const finished = (data?.jobs || []).filter(
+          (j) => j.status === 'done' && j.result_task_id)
+        if (!finished.length) return
+        setMessages((prev) => {
+          const known = new Set(
+            prev.filter((m) => m.kind === 'done' && m.task_id).map((m) => m.task_id))
+          const missing = finished.filter((j) => !known.has(j.result_task_id))
+          if (!missing.length) return prev
+          // task_id only — DoneCard's existing hydration turns each into the
+          // full detail card, so this path needs no second fetch of its own.
+          return [...prev, ...missing.map((j) => ({
+            id: nextId(), kind: 'done', status: 'completed',
+            task_id: j.result_task_id,
+          }))]
+        })
+      })
+      .catch(() => { /* offline or an older backend — the transcript stands */ })
+  }
+
+  // Reconcile the live session on mount and whenever it changes.
+  useEffect(() => {
+    if (sessionId && !viewingId) reconcileRuns(sessionId)
+  }, [sessionId, viewingId])
+
   // Record the outcome in the chat transcript, then close the wizard.
   function finishBuild() {
     if (buildStage.status === 'done') {
@@ -586,6 +623,9 @@ export default function App() {
     setShowStarters(false)
     setWizardOpen(false)
     setMessages((s.messages || []).map((m) => ({ ...m, id: m.id ?? nextId() })))
+    // Same reconciliation for an archived session: it was saved from the same
+    // transcript, so it lost the same cards.
+    reconcileRuns(s.id)
   }
   function deleteSession(id) {
     setSessions((prev) => {
