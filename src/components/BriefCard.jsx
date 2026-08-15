@@ -50,7 +50,7 @@ export default function BriefCard({ m, ui }) {
       </ul>
       <div className="actions">
         <button className="cta" disabled={genDisabled} onClick={onGenerate}>
-          Generate task →
+          Set options &amp; generate →
         </button>
       </div>
       <div className="gen-hint">{genHint}</div>

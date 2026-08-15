@@ -29,6 +29,22 @@ export function isValidEmail(value) {
   return email.length > 0 && email.length <= 254 && EMAIL_RE.test(email)
 }
 
+// The notify address doubles as the only lead signal a login-less product
+// gets, so it must be a WORK address — a throwaway gmail tells the team
+// nothing. Consumer domains only; anything else passes.
+const FREE_MAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'ymail.com',
+  'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'aol.com',
+  'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'pm.me',
+  'gmx.com', 'gmx.net', 'yandex.com', 'mail.com', 'rediffmail.com',
+])
+
+export function isBusinessEmail(value) {
+  if (!isValidEmail(value)) return false
+  const domain = (value || '').trim().toLowerCase().split('@').pop()
+  return !FREE_MAIL_DOMAINS.has(domain)
+}
+
 export function nextId() {
   _id += 1
   return _id

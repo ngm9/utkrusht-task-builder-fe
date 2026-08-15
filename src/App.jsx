@@ -6,7 +6,6 @@ import {
   prepareTaskBuilderRun,
   generateTaskBuilderRun,
   getTaskBuilderRun,
-  getTaskBuilderInstructionSuggestions,
 } from './client.js'
 import { fetchTaskDetail } from './taskDetail.js'
 import { registerIds, track } from './analytics.js'
@@ -97,9 +96,6 @@ export default function App() {
   // it. Seeded from localStorage so a returning recruiter doesn't retype them.
   const [notifyEmail, setNotifyEmail] = useState(() => loadNotifyEmail())
   const [notifyName, setNotifyName] = useState(() => loadNotifyName())
-  // Stack-aware instruction suggestions. Soft-fails to [] — the route returns
-  // 503 when its LLM call fails, and the static chips are the floor.
-  const [suggestions, setSuggestions] = useState([])
   const [shareLabel, setShareLabel] = useState('')
 
   // Share is invoked FROM a task card and receives that card's message, so the
@@ -216,27 +212,6 @@ export default function App() {
     if (w) w.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [wizardOpen])
 
-  // Suggestions are per-brief, so fetch them when the wizard opens rather than
-  // on every chat turn. Failure is silent by design: the static chips remain.
-  useEffect(() => {
-    if (!wizardOpen) return
-    const brief = panelStateRef.current.brief || {}
-    const names = (brief.competencies || []).filter(Boolean)
-    if (!names.length) return
-    let dead = false
-    // Params are passed FLAT, not wrapped in { query } — checked against the
-    // generated signature. The route reads only `names` today; `proficiency` is
-    // in the client's param type but ignored server-side, so suggestions are not
-    // level-aware yet.
-    getTaskBuilderInstructionSuggestions({
-      names: names.join(','),
-      proficiency: brief.proficiency || '',
-    })
-      .then(({ data }) => !dead && setSuggestions(data?.suggestions || []))
-      .catch(() => {})
-    return () => { dead = true }
-  }, [wizardOpen])
-
   // ---- brief panel ---------------------------------------------------------
   function updateBrief(data, { beforeId } = {}) {
     const ns = {
@@ -309,6 +284,11 @@ export default function App() {
         )
       }
       updateBrief(data, { beforeId: thinkingId })
+      // The user just CONFIRMED the summarised brief in chat ("confirm",
+      // "yes", any clear assent — the server decides and gates it on a
+      // complete brief). Asking them to also click the generate button they
+      // already agreed to is a dead click — open the flow for them.
+      if (data.generate_now) openWizard()
     } catch {
       patchMessage(thinkingId, { text: 'Network error — please try again.', pending: false })
     } finally {
@@ -363,7 +343,12 @@ export default function App() {
     setWizardStep('scenarios')
     setScenarioStage({
       mode: 'prep',
-      prepStages: PREP_STAGES.map(([key, label]) => ({ key, label, status: 'pending', log: '' })),
+      // First stage optimistically 'running': the real status arrives only
+      // after the enqueue round-trip + the worker claiming the job, which
+      // left the panel spinner-less for seconds after the click.
+      prepStages: PREP_STAGES.map(([key, label], i) => (
+        { key, label, status: i === 0 ? 'running' : 'pending', log: '' }
+      )),
       list: [],
       error: '',
     })
@@ -402,6 +387,9 @@ export default function App() {
             const s = byLabel[key] || {}
             return { key, label, status: s.status || 'pending', log: s.log || '' }
           })
+          // Keep the optimistic spinner while the worker hasn't claimed the
+          // job yet — an all-pending server answer must not blank it out.
+          if (prep.every((s) => s.status === 'pending')) prep[0].status = 'running'
           setScenarioStage((prev) => ({ ...prev, prepStages: prep }))
           const st = data.status
           if (st === 'done') {
@@ -667,7 +655,7 @@ export default function App() {
       // Name the button. In review someone with a complete brief asked "Generate
       // Task or Send?", pressed Send, and nothing happened — the CTA has to say
       // which control finishes the job.
-      ? 'Everything look good? Click Generate task → to build it.'
+      ? 'Everything look good? Confirm in the chat, or click Set options & generate →.'
       : 'Just answer in the chat — the brief fills in here as you go.'
   const genDisabled = !(isBriefComplete(panelState.brief) && sessionId && !generating)
 
@@ -759,13 +747,6 @@ export default function App() {
             notifyEmail={notifyEmail}
             notifyName={notifyName}
             onNotifyNameChange={setNotifyName}
-            suggestions={suggestions}
-            onUseSuggestion={(s) => {
-              // Append rather than replace: picking two suggestions should give
-              // both, and it must not wipe something already typed.
-              setInstructions((prev) => (prev.trim() ? `${prev.trim()}\n${s}` : s))
-              instructionsRef.current = instructions.trim() ? `${instructions.trim()}\n${s}` : s
-            }}
             onNotifyEmailChange={setNotifyEmail}
             onBuildTask={onBuildTask}
             buildStage={buildStage}
