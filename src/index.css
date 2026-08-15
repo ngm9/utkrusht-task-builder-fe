@@ -505,6 +505,11 @@ main { min-height:0; overflow-y:auto; padding:26px 24px 0;
 .chip:hover { border-color:var(--uk-green); color:var(--uk-green-deep);
   background:var(--green-tint); }
 
+/* Clickable answers under the bot's latest reply — same chip visual, but
+   laid out as a compact wrap row inside the bubble, not a full-width stack. */
+.opt-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.opt-chips .chip { width:auto; padding:6px 12px; }
+
 /* ---- dock (sticky footer of the chat column) ------------------------------- */
 .dock { position:sticky; bottom:0; width:100%; max-width:680px;
   padding:14px 0 18px; margin-top:auto;

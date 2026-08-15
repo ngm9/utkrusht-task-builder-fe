@@ -117,7 +117,12 @@ function Fragment({ label, value }) {
 }
 
 export default function Chat({ messages, briefUi, onHydrateTask, conversationId,
-                              onShare, shareLabel }) {
+                              onShare, shareLabel, onPickOption }) {
+  // Options are clickable ANSWERS to the bot's latest question — on any
+  // earlier bubble they would send a reply to a question that has moved on,
+  // so only the newest bot bubble keeps its chips.
+  const lastBotBubble = [...messages].reverse()
+    .find((m) => m.kind === 'bubble' && m.role === 'bot' && !m.pending)
   return (
     <>
       {messages.map((m) => {
@@ -162,7 +167,19 @@ export default function Chat({ messages, briefUi, onHydrateTask, conversationId,
                 <span />
               </span>
             ) : m.role === 'bot' ? (
-              <Markdown text={m.text} />
+              <>
+                <Markdown text={m.text} />
+                {onPickOption && m === lastBotBubble && m.options?.length ? (
+                  <div className="opt-chips">
+                    {m.options.map((opt, i) => (
+                      <button key={i} type="button" className="chip"
+                              onClick={() => onPickOption(opt)}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </>
             ) : (
               m.text
             )}

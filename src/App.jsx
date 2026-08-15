@@ -261,7 +261,11 @@ export default function App() {
     const thinkingId = addBubble('bot', '…', '', true)
     try {
       const { data } = await createTaskBuilderMessage(sessionIdRef.current, { message: text })
-      patchMessage(thinkingId, { text: data.reply, pending: false })
+      patchMessage(thinkingId, {
+        text: data.reply, pending: false,
+        // Clickable answers to this reply's question (chips under the bubble).
+        options: Array.isArray(data.options) ? data.options : [],
+      })
       // The bot hit a dead-end it cannot build and offered to forward a
       // request. Render the form inline, under the reply that offered it —
       // `kind` is the message-renderer discriminator, so the request's own
@@ -705,7 +709,8 @@ export default function App() {
           <div className="chat">
             <Chat messages={messages} briefUi={briefUi} onHydrateTask={hydrateTask}
                   conversationId={sessionId}
-                  onShare={onShare} shareLabel={shareLabel} />
+                  onShare={onShare} shareLabel={shareLabel}
+                  onPickOption={viewingId || wizardOpen ? null : sendText} />
 
             {/* Inside .chat, directly under the greeting, rather than after it.
                 .chat is flex:1, so a sibling here got pushed to the bottom of the
