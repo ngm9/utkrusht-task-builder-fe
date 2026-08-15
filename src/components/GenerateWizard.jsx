@@ -179,7 +179,7 @@ export default function GenerateWizard({
         {step === 'instructions' ? (
           <div className="wizard-step">
             <div className="wz-sub">
-              Optional — pick any that fit. These steer what kind of task gets built
+              Optional: pick any that fit. These steer what kind of task gets built
               {subtitle ? (
                 <>
                   {' '}for your <b>{subtitle}</b> brief
