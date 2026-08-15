@@ -238,7 +238,7 @@ export default function GenerateWizard({
             <div className="wz-sub">
               {scenarioStage.mode === 'prep'
                 ? 'We are generating the scenarios. This takes about 1-2 minutes; you pick one when they are ready.'
-                : 'Choose the scenario this task will be built from — it becomes part of the brief.'}
+                : 'Choose the scenario this task will be built from. It becomes part of the brief.'}
             </div>
 
             {scenarioStage.mode === 'prep' && (
@@ -311,7 +311,7 @@ export default function GenerateWizard({
                   ? 'That doesn’t look like an email address.'
                   : emailPersonal
                     ? 'Please use your work email address — personal addresses (gmail, yahoo, …) aren’t accepted.'
-                    : 'Building usually takes 5–10 minutes, longer if we verify it in a sandbox. We’ll email you when it’s ready so you can close this tab.'}
+                    : 'Building usually takes 5-10 minutes. We’ll email you when it’s ready so you can close this tab.'}
               </div>
             </div>
 
