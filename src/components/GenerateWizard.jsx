@@ -237,18 +237,12 @@ export default function GenerateWizard({
           <div className="wizard-step">
             <div className="wz-sub">
               {scenarioStage.mode === 'prep'
-                ? 'Creating scenario options for your brief — you pick one when they are ready.'
+                ? 'We are generating the scenarios. This takes about 1-2 minutes; you pick one when they are ready.'
                 : 'Choose the scenario this task will be built from — it becomes part of the brief.'}
             </div>
 
             {scenarioStage.mode === 'prep' && (
-              <>
-                <PrepProgress prepStages={scenarioStage.prepStages} />
-                <div className="gen-hint">
-                  Running preflight, input files, and scenario generation (~1–2 min). Expand a
-                  stage's <b>logs</b> to watch it work.
-                </div>
-              </>
+              <PrepProgress prepStages={scenarioStage.prepStages} />
             )}
 
             {scenarioStage.mode === 'error' && (
