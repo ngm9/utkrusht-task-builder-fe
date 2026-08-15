@@ -66,3 +66,22 @@ export const getTraceLlm = (runId, limit = 200) =>
   get(`/traces/${encodeURIComponent(runId)}/llm?limit=${limit}`)
 export const getTraceArtifacts = (runId, canon) =>
   get(`/traces/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(canon)}`)
+
+// Clone a FAILED run into a fresh queued job that reuses the stored prep
+// (skips 00-02, re-runs prompts + generate). 404 for manifest-only runs
+// that have no job row; 409 when the run isn't failed/cancelled.
+export async function rerunTrace(runId) {
+  const jwt = getJwt()
+  const res = await fetch(
+    `${API_BASE}/v2/task-builder/traces/${encodeURIComponent(runId)}/rerun`, {
+      method: 'POST',
+      headers: {
+        'X-Token-Source': 'recruiter',
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+      },
+    })
+  if (res.status === 401 || res.status === 403) throw new TraceAuthError('unauthorised')
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message
+    || `${res.status}`)
+  return res.json()
+}
