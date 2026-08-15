@@ -441,13 +441,18 @@ export default function App() {
     generatingRef.current = true
     setGenerating(true)
     setWizardStep('building')
+    // Prepared stages show their checkmarks immediately, and the first stage
+    // that will actually run spins from the CLICK — the real status arrives
+    // only after the enqueue round-trip + worker claim, which left the list
+    // spinner-less (and checkmark-less) for seconds.
+    let seededRunning = false
     setBuildStage({
-      stages: PIPELINE_STAGES.map(([key, label]) => ({
-        key,
-        label,
-        status: scenariosPreparedRef.current && PREPARED_STAGES.includes(key) ? 'ok' : 'pending',
-        log: '',
-      })),
+      stages: PIPELINE_STAGES.map(([key, label]) => {
+        const done = scenariosPreparedRef.current && PREPARED_STAGES.includes(key)
+        const status = done ? 'ok' : seededRunning ? 'pending' : 'running'
+        if (status === 'running') seededRunning = true
+        return { key, label, status, log: '' }
+      }),
       status: 'running',
       result: null,
       error: '',
@@ -479,8 +484,20 @@ export default function App() {
           for (const s of data.stages || []) byLabel[s.label] = s
           const stages = PIPELINE_STAGES.map(([key, label]) => {
             const s = byLabel[key] || {}
-            return { key, label, status: s.status || 'pending', log: s.log || '' }
+            let status = s.status || 'pending'
+            // A prepared run never re-emits stages 00-02, so the server's
+            // answer omits them — their checkmarks must not blank out.
+            if (status === 'pending' && scenariosPreparedRef.current
+                && PREPARED_STAGES.includes(key)) status = 'ok'
+            return { key, label, status, log: s.log || '' }
           })
+          // Until the worker claims the job every remaining stage reads
+          // 'pending' — keep the first one spinning instead of a dead list.
+          if (!stages.some((s) => s.status === 'running' || s.status === 'failed')
+              && data.status !== 'done') {
+            const first = stages.find((s) => s.status !== 'ok')
+            if (first) first.status = 'running'
+          }
           setBuildStage((prev) => ({ ...prev, stages }))
           const st = data.status
           if (st === 'done') {
