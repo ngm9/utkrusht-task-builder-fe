@@ -710,7 +710,15 @@ export default function App() {
             <Chat messages={messages} briefUi={briefUi} onHydrateTask={hydrateTask}
                   conversationId={sessionId}
                   onShare={onShare} shareLabel={shareLabel}
-                  onPickOption={viewingId || wizardOpen ? null : sendText} />
+                  onPickOption={viewingId || wizardOpen ? null : (opt) => {
+                    // "Other…" is the type-your-own affordance, not an answer —
+                    // focus the composer instead of sending the literal text.
+                    if (/^(other|something else)\b/i.test(opt.trim())) {
+                      inputElRef.current?.focus()
+                      return
+                    }
+                    sendText(opt)
+                  }} />
 
             {/* Inside .chat, directly under the greeting, rather than after it.
                 .chat is flex:1, so a sibling here got pushed to the bottom of the
