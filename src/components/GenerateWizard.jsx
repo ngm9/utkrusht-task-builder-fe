@@ -159,7 +159,9 @@ export default function GenerateWizard({
     <div className="wizard-inline">
       <div className="modal-head">
         <div className="modal-title">
-          {step === 'instructions'
+          {step === 'booting'
+            ? 'Preparing your options…'
+            : step === 'instructions'
             ? 'Task instructions'
             : step === 'scenarios'
               // While the prep stages run there is nothing to pick yet — the
@@ -176,7 +178,16 @@ export default function GenerateWizard({
       </div>
 
       <div className="modal-body">
-        {step === 'instructions' ? (
+        {step === 'booting' ? (
+          <div className="wizard-step">
+            <div className="prep-stage running">
+              <div className="prep-stage-head">
+                <span className="spin" aria-hidden="true" />
+                <span>Getting the options ready…</span>
+              </div>
+            </div>
+          </div>
+        ) : step === 'instructions' ? (
           <div className="wizard-step">
             <div className="wz-sub">
               Optional: pick any that fit. These steer what kind of task gets built

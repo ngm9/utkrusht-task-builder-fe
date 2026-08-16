@@ -212,6 +212,15 @@ export default function App() {
     if (w) w.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [wizardOpen])
 
+  // Hand the 'booting' step over to the real options once the panel is on
+  // screen. Tied to the smooth-scroll above rather than a made-up delay: the
+  // spinner covers travel that actually happens.
+  useEffect(() => {
+    if (!wizardOpen || wizardStep !== 'booting') return
+    const t = setTimeout(() => setWizardStep('instructions'), 400)
+    return () => clearTimeout(t)
+  }, [wizardOpen, wizardStep])
+
   // ---- brief panel ---------------------------------------------------------
   function updateBrief(data, { beforeId } = {}) {
     const ns = {
@@ -314,7 +323,10 @@ export default function App() {
   function openWizard() {
     if (!sessionIdRef.current || !isBriefComplete(panelStateRef.current.brief) || generatingRef.current)
       return
-    setWizardStep('instructions')
+    // Open on a visible "preparing" step first. The panel renders below the
+    // conversation and is scrolled into view, so jumping straight to the
+    // chips made the click look like it did nothing until the scroll landed.
+    setWizardStep('booting')
     setWizardOpen(true)
   }
   function closeWizard() {
