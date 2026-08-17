@@ -16,6 +16,7 @@ import {
   getTraceLlm,
   getTraceLog,
   listTraces,
+  rerunTrace,
 } from '../../traceApi.js'
 import { getJwt, promptForJwt } from '../../auth.js'
 import { LEVELS, parseLog, rowMatches, stageHue, stageOfLog } from './logModel.js'
@@ -134,6 +135,19 @@ export default function TraceApp() {
   const [spanFilter, setSpanFilter] = useState('')
   const [needsAuth, setNeedsAuth] = useState(false)
   const [err, setErr] = useState('')
+  // Re-run of a failed run: {busy, msg}. Reset when the selection changes so
+  // one run's confirmation never reads as another's.
+  const [rerun, setRerun] = useState({ busy: false, msg: '' })
+  useEffect(() => setRerun({ busy: false, msg: '' }), [run?.run_id])
+  async function onRerun(runId) {
+    setRerun({ busy: true, msg: '' })
+    try {
+      const data = await rerunTrace(runId)
+      setRerun({ busy: false, msg: `Queued as ${data.job_id}. It will appear in this list when it finishes.` })
+    } catch (e) {
+      setRerun({ busy: false, msg: e.message || 'Re-run failed.' })
+    }
+  }
   const [busy, setBusy] = useState(false)
   const [loadingRuns, setLoadingRuns] = useState(() => readCachedRuns() === null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -550,6 +564,19 @@ export default function TraceApp() {
                       </>
                     )}
                   </dl>
+                  {/* Failed runs can be re-queued reusing the stored prep —
+                      stages 00-02 are durable in the DB, so the rerun starts
+                      at prompts. The server 404s manifest-only runs and 409s
+                      anything not failed, both rendered as the message. */}
+                  {run.manifest?.outcome && run.manifest.outcome !== 'created' && (
+                    <div className="tr-rerun-row">
+                      <button type="button" className="tr-btn" disabled={!!rerun.busy}
+                              onClick={() => onRerun(run.run_id)}>
+                        {rerun.busy ? 'Queuing…' : 'Re-run from prompts →'}
+                      </button>
+                      {rerun.msg && <span className="tr-faint"> {rerun.msg}</span>}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

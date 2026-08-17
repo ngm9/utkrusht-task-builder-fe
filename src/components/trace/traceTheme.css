@@ -98,6 +98,8 @@
   border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer;
 }
 .tr-btn:hover { background: var(--hover); border-color: var(--accent); }
+.tr-rerun-row { margin-top: 10px; display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; }
 .tr-conn {
   font-size: 11px; color: var(--fg-dim); border: 1px solid var(--border);
   border-radius: 999px; padding: 1px 8px;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SERVICE_CHIPS, SHAPE_CHIPS } from '../constants.js'
-import { isValidEmail, parseScenario } from '../lib.js'
+import { isBusinessEmail, isValidEmail, parseScenario } from '../lib.js'
 import TaskDetailCard from './TaskDetailCard.jsx'
 
 function ChipToggle({ on, label, onClick }) {
@@ -138,8 +138,6 @@ export default function GenerateWizard({
   notifyEmail,
   notifyName,
   onNotifyNameChange,
-  suggestions = [],
-  onUseSuggestion,
   onNotifyEmailChange,
   onBuildTask,
   buildStage, // { stages, status: 'running'|'done'|'failed', result, error }
@@ -147,21 +145,31 @@ export default function GenerateWizard({
   onClose,
 }) {
   if (!open) return null
-  // Optional field: empty is fine, but a half-typed address must not start a
-  // build — the server rejects it and the run never happens. Blocking here
-  // turns that into an inline correction instead of a failed build.
+  // A half-typed address must not start a build — the server rejects it and
+  // the run never happens. Blocking here turns that into an inline correction
+  // instead of a failed build. Work address only: this is the product's one
+  // lead signal, so a consumer domain (gmail & co.) doesn't count.
   const emailTouched = (notifyEmail || '').trim().length > 0
-  const emailInvalid = emailTouched && !isValidEmail(notifyEmail)
+  const emailMalformed = emailTouched && !isValidEmail(notifyEmail)
+  const emailPersonal = emailTouched && !emailMalformed && !isBusinessEmail(notifyEmail)
+  const emailInvalid = emailMalformed || emailPersonal
   // Both required — see the note on the fields below.
-  const leadReady = !!(notifyName || '').trim() && isValidEmail(notifyEmail || '')
+  const leadReady = !!(notifyName || '').trim() && isBusinessEmail(notifyEmail || '')
   return (
     <div className="wizard-inline">
       <div className="modal-head">
         <div className="modal-title">
-          {step === 'instructions'
-            ? 'Suggested instructions'
+          {step === 'booting'
+            ? 'Preparing your options…'
+            : step === 'instructions'
+            ? 'Task instructions'
             : step === 'scenarios'
-              ? 'Pick a scenario'
+              // While the prep stages run there is nothing to pick yet — the
+              // title must describe what IS happening, not a step that hasn't
+              // arrived (it read as "pick a scenario" over an empty list).
+              ? scenarioStage.mode === 'prep'
+                ? 'Generating scenarios…'
+                : 'Pick a scenario'
               : 'Building your task'}
         </div>
         <button className="modal-close" type="button" aria-label="Close" onClick={onClose}>
@@ -170,37 +178,26 @@ export default function GenerateWizard({
       </div>
 
       <div className="modal-body">
-        {step === 'instructions' ? (
+        {step === 'booting' ? (
+          <div className="wizard-step">
+            <div className="prep-stage running">
+              <div className="prep-stage-head">
+                <span className="spin" aria-hidden="true" />
+                <span>Getting the options ready…</span>
+              </div>
+            </div>
+          </div>
+        ) : step === 'instructions' ? (
           <div className="wizard-step">
             <div className="wz-sub">
-              Optional — pick any that fit. These steer what kind of task gets built.
+              Optional: pick any that fit. These steer what kind of task gets built
               {subtitle ? (
                 <>
-                  {' '}
-                  Suggested for a <b>{subtitle}</b> role.
+                  {' '}for your <b>{subtitle}</b> brief
                 </>
               ) : null}
+              . Skip them all to let the pipeline decide.
             </div>
-
-            {/* LLM-generated, stack-aware suggestions. The static chips below stay:
-                they encode INFRA choices that map to runtime templates, which a
-                sentence of prose cannot express, and they are the fallback when
-                the endpoint soft-fails (503). Before this, a ReactJs/TypeScript
-                brief was offered Redis, Kafka, PostgreSQL and MCP — backend infra
-                with nothing to do with the role. */}
-            {suggestions.length > 0 && (
-              <div className="wz-group">
-                <div className="wz-group-label">Suggested for this brief (optional)</div>
-                <div className="wz-suggestions">
-                  {suggestions.map((s, i) => (
-                    <button key={i} type="button" className="wz-suggestion"
-                            onClick={() => onUseSuggestion(s)}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div className="wz-group">
               <div className="wz-group-label">Add an external service (optional)</div>
@@ -250,17 +247,13 @@ export default function GenerateWizard({
         ) : step === 'scenarios' ? (
           <div className="wizard-step">
             <div className="wz-sub">
-              Choose the scenario this task will be built from — it becomes part of the brief.
+              {scenarioStage.mode === 'prep'
+                ? 'We are generating the scenarios. This takes about 1-2 minutes; you pick one when they are ready.'
+                : 'Choose the scenario this task will be built from. It becomes part of the brief.'}
             </div>
 
             {scenarioStage.mode === 'prep' && (
-              <>
-                <PrepProgress prepStages={scenarioStage.prepStages} />
-                <div className="gen-hint">
-                  Building a candidate pool for this brief — preflight, input files, and scenarios
-                  (~1–2 min). Expand a stage's <b>logs</b> to watch it work.
-                </div>
-              </>
+              <PrepProgress prepStages={scenarioStage.prepStages} />
             )}
 
             {scenarioStage.mode === 'error' && (
@@ -325,9 +318,11 @@ export default function GenerateWizard({
                 aria-describedby="wz-email-hint"
               />
               <div className="wz-email-hint" id="wz-email-hint">
-                {emailInvalid
+                {emailMalformed
                   ? 'That doesn’t look like an email address.'
-                  : 'Building usually takes 5–10 minutes, longer if we verify it in a sandbox. We’ll email you when it’s ready — or if it fails — so you can close this tab.'}
+                  : emailPersonal
+                    ? 'Please use your work email address — personal addresses (gmail, yahoo, …) aren’t accepted.'
+                    : 'Building usually takes 5-10 minutes. We’ll email you when it’s ready so you can close this tab.'}
               </div>
             </div>
 
